@@ -19,7 +19,7 @@ struct GameState {
     matrix: Vec<Vec<CellState>>, // y % 2 == 0 -> down column
     tiles: i32,
     leak: i32,
-    score: i32,
+    score: f64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -30,15 +30,16 @@ struct Hidden {
 
 #[derive(Debug, Clone, Copy)]
 enum CellState {
-    Hidden(Hidden),
-    Hint(i32),
+    Unused,
+    Hot,
+    Insulation,
 }
 
 #[derive(Debug, Clone, Copy)]
 enum Message {
-    Mark(usize, usize),
-    UnMark(usize, usize),
-    Explore(usize, usize),
+    Heat(usize, usize),
+    Insulate(usize, usize),
+    //Explore(usize, usize),
 }
 
 impl Application for GameState {
@@ -48,31 +49,19 @@ impl Application for GameState {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
-        let m1 = vec![
-            vec![
-                CellState::Hidden(Hidden {
-                    marked: false,
-                    is_mine: false
-                });
-                5
-            ];
-            10
-        ];
+        let m1 = vec![vec![CellState::Unused; 5]; 10];
         // TODO proper place out mines
         let mut x: Vec<Vec<CellState>> = m1
             .iter()
             .map(|i| i.iter().map(|i| i.clone()).collect())
             .collect();
-        x[3][3] = CellState::Hidden(Hidden {
-            marked: false,
-            is_mine: true,
-        });
+        x[3][3] = CellState::Hot;
         (
             GameState {
                 matrix: x,
-                tiles: 0,
-                leak: 0,
-                score: 0,
+                tiles: 1,
+                leak: 12,
+                score: 1.0 / 12.0,
             },
             Command::none(),
         )
@@ -84,52 +73,17 @@ impl Application for GameState {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::Explore(x0, y0) => match &self.matrix[x0][y0] {
-                CellState::Hidden(s @ Hidden { is_mine: false, .. }) => {
-                    let x: i32 = x0.try_into().unwrap();
-                    let y: i32 = y0.try_into().unwrap();
-                    let hard_neighbors = if ((y % 2) == 0) {
-                        [(x - 1, y + 1), (x + 1, y + 1)]
-                    } else {
-                        [(x - 1, y + 1), (x - 1, y - 1)]
-                    };
-                    let mut neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)].to_vec();
-                    neighbors.append(&mut hard_neighbors.to_vec());
-                    let s = sum_mines(self.matrix.clone(), neighbors);
-                    self.matrix[x0][y0] = CellState::Hint(s);
-                }
-                CellState::Hidden(s @ Hidden { is_mine: true, .. }) => {
-                    self.matrix[x0][y0] = CellState::Hint(9999);
-                }
-                s => {
-                    println!("Bad Cell{:#?}\n", s);
-                    unimplemented!()
-                }
-            },
-            Message::Mark(x, y) => match &self.matrix[x][y] {
-                CellState::Hidden(s @ Hidden { marked: false, .. }) => {
-                    self.matrix[x][y] = CellState::Hidden(Hidden {
-                        marked: true,
-                        ..s.clone()
-                    })
-                }
-                s => {
-                    println!("Bad Cell{:#?}\n", s);
-                    unimplemented!()
-                }
-            },
-            Message::UnMark(x, y) => match &self.matrix[x][y] {
-                CellState::Hidden(s @ Hidden { marked: true, .. }) => {
-                    self.matrix[x][y] = CellState::Hidden(Hidden {
-                        marked: false,
-                        ..s.clone()
-                    })
-                }
-                s => {
-                    println!("Bad Cell{:#?}\n", s);
-                    unimplemented!()
-                }
-            },
+            Message::Heat(x, y) => {
+                self.tiles = self.tiles + 1;
+                self.matrix[x][y] = CellState::Hot;
+                self.leak = self.leak + leak_delta(self.matrix.clone(), neighbors(x, y));
+                self.score = self.tiles as f64 / self.leak as f64;
+            }
+            Message::Insulate(x, y) => {
+                self.matrix[x][y] = CellState::Insulation;
+                self.leak = self.leak + leak_delta_ins(self.matrix.clone(), neighbors(x, y));
+                self.score = self.tiles as f64 / self.leak as f64;
+            }
         }
 
         Command::none()
@@ -157,9 +111,9 @@ impl Application for GameState {
             })
             .collect();
         let matrix = crate::Element::from(iced::widget::Row::with_children(x));
-        let tiles_e = to_text(format!("{}", self.tiles).to_string());
-        let leak_e = to_text(format!("{}", self.leak).to_string());
-        let score_e = to_text(format!("{}", self.score).to_string());
+        let tiles_e = to_text(format!("Tiles: {} ", self.tiles).to_string());
+        let leak_e = to_text(format!("Leak: {} ", self.leak).to_string());
+        let score_e = to_text(format!("Score: {}", self.score).to_string());
         let score = crate::Element::from(iced::widget::Row::with_children(vec![
             tiles_e, leak_e, score_e,
         ]));
@@ -175,25 +129,17 @@ impl Application for GameState {
 
 fn to_gui(y: usize, x: usize, s: CellState) -> Element<'static, Message> {
     let content = match s {
-        CellState::Hidden(Hidden { marked: false, .. }) => {
-            let button_text = format!("{} {}", x, y).to_string();
+        CellState::Unused => {
+            let button_text = "Heat".to_string();
             let button_content = to_text(button_text);
-            let b1 = button(button_content).on_press(Message::Mark(y, x));
-            let button_text = "explore".to_string();
+            let b1 = button(button_content).on_press(Message::Heat(y, x));
+            let button_text = "Insulate".to_string();
             let button_content = to_text(button_text);
-            let b2 = button(button_content).on_press(Message::Explore(y, x));
+            let b2 = button(button_content).on_press(Message::Insulate(y, x));
             crate::Element::from(iced::widget::column!(b1, b2))
         }
-        CellState::Hidden(Hidden { marked: true, .. }) => {
-            let button_text = "unmark".to_string();
-            let button_content = to_text(button_text);
-            let b1 = button(button_content).on_press(Message::UnMark(y, x));
-            crate::Element::from(b1)
-        }
-        CellState::Hint(i) => {
-            let text = format!("{}", i);
-            to_text(text)
-        }
+        CellState::Insulation => to_text("Insulation".to_string()),
+        CellState::Hot => to_text("Hot".to_string()),
     };
     crate::Element::from(container(content).width(100).height(100))
 }
@@ -202,20 +148,58 @@ fn to_text(s: String) -> Element<'static, Message> {
     crate::Element::from(text(s).size(20))
 }
 
-fn sum_mines(m: Vec<Vec<CellState>>, cells: Vec<(i32, i32)>) -> i32 {
+fn neighbors(x0: usize, y0: usize) -> Vec<(i32, i32)> {
+    let x: i32 = x0.try_into().unwrap();
+    let y: i32 = y0.try_into().unwrap();
+    let hard_neighbors = if ((y % 2) == 0) {
+        [(x - 1, y + 1), (x + 1, y + 1)]
+    } else {
+        [(x - 1, y + 1), (x - 1, y - 1)]
+    };
+    let mut neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)].to_vec();
+    neighbors.append(&mut hard_neighbors.to_vec());
+    return neighbors;
+}
+
+fn leak_delta(m: Vec<Vec<CellState>>, cells: Vec<(i32, i32)>) -> i32 {
     let ret = cells
         .into_iter()
-        .filter_map(|(x, y)| {
-            let ret: Option<(usize, usize)> = match (x.try_into(), y.try_into()) {
-                (Ok(x1), Ok(y1)) => Some((x1, y1)),
-                _ => None,
+        .map(|(x, y)| {
+            let ret: (usize, usize) = match (x.try_into(), y.try_into()) {
+                (Ok(x1), Ok(y1)) => (x1, y1),
+                _ => (usize::MAX, usize::MAX),
             };
             ret
         })
         .map(|(x, y)| match m.get(x) {
             Some(v) => match v.get(y) {
-                Some(CellState::Hidden(Hidden { is_mine: true, .. })) => 1,
-                _ => 0,
+                Some(CellState::Hot) => -2,
+                Some(CellState::Insulation) => 1,
+                Some(CellState::Unused) => 2,
+                None => 2,
+            },
+            None => 2,
+        })
+        .sum();
+    ret
+}
+
+fn leak_delta_ins(m: Vec<Vec<CellState>>, cells: Vec<(i32, i32)>) -> i32 {
+    let ret = cells
+        .into_iter()
+        .map(|(x, y)| {
+            let ret: (usize, usize) = match (x.try_into(), y.try_into()) {
+                (Ok(x1), Ok(y1)) => (x1, y1),
+                _ => (usize::MAX, usize::MAX),
+            };
+            ret
+        })
+        .map(|(x, y)| match m.get(x) {
+            Some(v) => match v.get(y) {
+                Some(CellState::Hot) => -1,
+                Some(CellState::Insulation) => 0,
+                Some(CellState::Unused) => 0,
+                None => 0,
             },
             None => 0,
         })

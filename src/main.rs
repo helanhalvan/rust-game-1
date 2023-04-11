@@ -1,4 +1,5 @@
 use iced::executor;
+use iced::futures::SinkExt;
 use iced::mouse::Button;
 use iced::widget::canvas::{stroke, Cache, Cursor, Geometry, LineCap, Path, Stroke};
 use iced::widget::{button, column, container, text, Column, Text};
@@ -15,7 +16,10 @@ pub fn main() -> iced::Result {
 }
 
 struct GameState {
-    matrix: Vec<Vec<CellState>>,
+    matrix: Vec<Vec<CellState>>, // y % 2 == 0 -> down column
+    tiles: i32,
+    leak: i32,
+    score: i32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -50,20 +54,28 @@ impl Application for GameState {
                     marked: false,
                     is_mine: false
                 });
-                10
+                5
             ];
-            5
+            10
         ];
         // TODO proper place out mines
         let mut x: Vec<Vec<CellState>> = m1
             .iter()
             .map(|i| i.iter().map(|i| i.clone()).collect())
             .collect();
-        x[0][0] = CellState::Hidden(Hidden {
+        x[3][3] = CellState::Hidden(Hidden {
             marked: false,
             is_mine: true,
         });
-        (GameState { matrix: x }, Command::none())
+        (
+            GameState {
+                matrix: x,
+                tiles: 0,
+                leak: 0,
+                score: 0,
+            },
+            Command::none(),
+        )
     }
 
     fn title(&self) -> String {
@@ -76,20 +88,14 @@ impl Application for GameState {
                 CellState::Hidden(s @ Hidden { is_mine: false, .. }) => {
                     let x: i32 = x0.try_into().unwrap();
                     let y: i32 = y0.try_into().unwrap();
-                    let s = sum_mines(
-                        self.matrix.clone(),
-                        [
-                            (x + 1, y),
-                            (x - 1, y),
-                            (x, y + 1),
-                            (x, y - 1),
-                            (x + 1, y + 1),
-                            (x + 1, y - 1),
-                            (x - 1, y + 1),
-                            (x - 1, y - 1),
-                        ]
-                        .to_vec(),
-                    );
+                    let hard_neighbors = if ((y % 2) == 0) {
+                        [(x - 1, y + 1), (x + 1, y + 1)]
+                    } else {
+                        [(x - 1, y + 1), (x - 1, y - 1)]
+                    };
+                    let mut neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)].to_vec();
+                    neighbors.append(&mut hard_neighbors.to_vec());
+                    let s = sum_mines(self.matrix.clone(), neighbors);
                     self.matrix[x0][y0] = CellState::Hint(s);
                 }
                 CellState::Hidden(s @ Hidden { is_mine: true, .. }) => {
@@ -135,15 +141,29 @@ impl Application for GameState {
             .iter()
             .enumerate()
             .map(|(y_index, i)| {
-                crate::Element::from(iced::widget::Row::with_children(
-                    i.iter()
-                        .enumerate()
-                        .map(|(x_index, i)| to_gui(y_index, x_index, i.clone()))
-                        .collect(),
-                ))
+                let padding: Element<'static, Message> =
+                    crate::Element::from(if (y_index % 2 == 0) {
+                        container("").width(100).height(50)
+                    } else {
+                        container("").width(10).height(10)
+                    });
+                let mut data: Vec<Element<'static, Message>> = i
+                    .iter()
+                    .enumerate()
+                    .map(|(x_index, i)| to_gui(y_index, x_index, i.clone()))
+                    .collect();
+                data.insert(0, padding);
+                crate::Element::from(iced::widget::Column::with_children(data))
             })
             .collect();
-        let content = iced::widget::Column::with_children(x);
+        let matrix = crate::Element::from(iced::widget::Row::with_children(x));
+        let tiles_e = to_text(format!("{}", self.tiles).to_string());
+        let leak_e = to_text(format!("{}", self.leak).to_string());
+        let score_e = to_text(format!("{}", self.score).to_string());
+        let score = crate::Element::from(iced::widget::Row::with_children(vec![
+            tiles_e, leak_e, score_e,
+        ]));
+        let content = iced::widget::Column::with_children(vec![matrix, score]);
 
         container(content)
             .width(Length::Fill)
@@ -156,7 +176,7 @@ impl Application for GameState {
 fn to_gui(y: usize, x: usize, s: CellState) -> Element<'static, Message> {
     let content = match s {
         CellState::Hidden(Hidden { marked: false, .. }) => {
-            let button_text = "mark".to_string();
+            let button_text = format!("{} {}", x, y).to_string();
             let button_content = to_text(button_text);
             let b1 = button(button_content).on_press(Message::Mark(y, x));
             let button_text = "explore".to_string();
@@ -194,7 +214,7 @@ fn sum_mines(m: Vec<Vec<CellState>>, cells: Vec<(i32, i32)>) -> i32 {
         })
         .map(|(x, y)| match m.get(x) {
             Some(v) => match v.get(y) {
-                Some(CellState::Hidden(Hidden{ is_mine: true, ..})) => 1,
+                Some(CellState::Hidden(Hidden { is_mine: true, .. })) => 1,
                 _ => 0,
             },
             None => 0,

@@ -1,3 +1,7 @@
+use core::fmt;
+use std::collections::HashSet;
+use std::fmt::Display;
+
 use iced::executor;
 use iced::widget::{button, container, text};
 use iced::{Application, Command, Element, Length, Settings, Theme};
@@ -22,14 +26,67 @@ struct GameState {
 
 type Pos = (usize, usize);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum CellState {
+    Hidden,
+    Unused,
+    Hot(bool),
+    Insulation,
+    Feeder,
+    ActionMachine(i32),
+}
+
+//no data variant of CellState for easy comparision and similar
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum CellStateVariant {
     Hidden,
     Unused,
     Hot,
     Insulation,
-    ActionMachine(i32),
+    Feeder,
+    ActionMachine,
 }
+
+//there should be a way to derive this
+impl Into<CellStateVariant> for CellState {
+    fn into(self) -> CellStateVariant {
+        match self {
+            CellState::Hidden => CellStateVariant::Hidden,
+            CellState::Unused => CellStateVariant::Unused,
+            CellState::Hot(_) => CellStateVariant::Hot,
+            CellState::Insulation => CellStateVariant::Insulation,
+            CellState::Feeder => CellStateVariant::Feeder,
+            CellState::ActionMachine(_) => CellStateVariant::ActionMachine,
+        }
+    }
+}
+
+impl Into<i32> for CellStateVariant {
+    fn into(self) -> i32 {
+        self as i32
+    }
+}
+
+impl fmt::Display for CellStateVariant {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+/*
+impl fmt::Display for CellStateVariant {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CellStateVariant::Hidden => write!(f, "Hidden"),
+            CellStateVariant::Unused => write!(f, "Unused"),
+            CellStateVariant::Hot => write!(f, "Hot"),
+            CellStateVariant::Insulation => write!(f, "Insulation"),
+            CellStateVariant::Feeder => write!(f, "Feeder"),
+            CellStateVariant::ActionMachine => write!(f, "ActionMachine"),
+        }
+    }
+}
+*/
 
 #[derive(Debug, Clone, Copy)]
 enum Message {
@@ -37,6 +94,7 @@ enum Message {
     Insulate(usize, usize),
     Explore(usize, usize),
     BuildActionMachine(usize, usize),
+    BuildFeeder(usize, usize),
 }
 
 impl Application for GameState {
@@ -47,14 +105,14 @@ impl Application for GameState {
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
         let mut m1 = vec![vec![CellState::Hidden; 5]; 10];
-        m1[3][3] = CellState::Hot;
+        m1[3][3] = CellState::Hot(false);
         (
             GameState {
                 matrix: m1,
                 tiles: 1,
                 leak: 12,
                 score: 1.0 / 12.0,
-                actions: 10,
+                actions: 10000,
                 action_machine: vec![],
             },
             Command::none(),
@@ -69,7 +127,7 @@ impl Application for GameState {
         match message {
             Message::Heat(x, y) => {
                 self.tiles = self.tiles + 1;
-                self.matrix[x][y] = CellState::Hot;
+                self.matrix[x][y] = CellState::Hot(false);
                 self.leak = self.leak + leak_delta(x, y, &self.matrix);
                 self.score = self.tiles as f64 / self.leak as f64;
             }
@@ -85,6 +143,10 @@ impl Application for GameState {
                 self.matrix[x][y] = CellState::ActionMachine(3);
                 self.action_machine.push((x, y))
             }
+            Message::BuildFeeder(x, y) => {
+                self.matrix[x][y] = CellState::Feeder;
+                self.action_machine.push((x, y))
+            }
         }
         self.actions = self.actions + game_tick(&mut self.matrix, &self.action_machine) - 1;
         Command::none()
@@ -95,9 +157,9 @@ impl Application for GameState {
             .matrix
             .iter()
             .enumerate()
-            .map(|(y_index, i)| {
+            .map(|(x_index, i)| {
                 let padding: Element<'static, Message> =
-                    crate::Element::from(if y_index % 2 == 0 {
+                    crate::Element::from(if x_index % 2 == 0 {
                         container("").width(100).height(50)
                     } else {
                         container("").width(10).height(10)
@@ -105,7 +167,7 @@ impl Application for GameState {
                 let mut data: Vec<Element<'static, Message>> = i
                     .iter()
                     .enumerate()
-                    .map(|(x_index, i)| to_gui(y_index, x_index, self.actions, i.clone()))
+                    .map(|(y_index, i)| to_gui(x_index, y_index, self.actions, i.clone()))
                     .collect();
                 data.insert(0, padding);
                 crate::Element::from(iced::widget::Column::with_children(data))
@@ -130,36 +192,42 @@ impl Application for GameState {
     }
 }
 
-fn to_gui<'a>(y: usize, x: usize, actions: i32, s: CellState) -> Element<'a, Message> {
+fn to_gui<'a>(x: usize, y: usize, actions: i32, s: CellState) -> Element<'a, Message> {
     let content = match s {
         CellState::Unused => {
             if actions > 0 {
-                let button_text = "Heat".to_string();
+                let button_text = "H".to_string();
                 let button_content = to_text(button_text);
-                let b1 = button(button_content).on_press(Message::Heat(y, x));
-                let button_text = "Insulate".to_string();
+                let b1 = button(button_content).on_press(Message::Heat(x, y));
+                let button_text = "I".to_string();
                 let button_content = to_text(button_text);
-                let b2 = button(button_content).on_press(Message::Insulate(y, x));
-                let button_text = "Action".to_string();
+                let b2 = button(button_content).on_press(Message::Insulate(x, y));
+                let button_text = "A".to_string();
                 let button_content = to_text(button_text);
-                let b3 = button(button_content).on_press(Message::BuildActionMachine(y, x));
-                crate::Element::from(iced::widget::column!(b1, b2, b3))
+                let b3 = button(button_content).on_press(Message::BuildActionMachine(x, y));
+                let button_text = "F".to_string();
+                let button_content = to_text(button_text);
+                let b4 = button(button_content).on_press(Message::BuildFeeder(x, y));
+                crate::Element::from(iced::widget::row!(b1, b2, b3, b4))
             } else {
                 to_text("Unused".to_string())
             }
         }
-        CellState::ActionMachine(c) => to_text(format!("A {}", c).to_string()),
-        CellState::Insulation => to_text("Insulation".to_string()),
-        CellState::Hot => to_text("Hot".to_string()),
         CellState::Hidden => {
             if actions > 0 {
                 let button_text = "Explore".to_string();
                 let button_content = to_text(button_text);
-                let b1 = button(button_content).on_press(Message::Explore(y, x));
+                let b1 = button(button_content).on_press(Message::Explore(x, y));
                 crate::Element::from(b1)
             } else {
                 to_text("Hidden".to_string())
             }
+        }
+        CellState::ActionMachine(c) => to_text(format!("A {}", c).to_string()),
+        CellState::Hot(state) => to_text(format!("Hot {state}").to_string()),
+        a => {
+            let v: CellStateVariant = a.into();
+            to_text(v.to_string())
         }
     };
     crate::Element::from(container(content).width(100).height(100))
@@ -174,6 +242,19 @@ fn game_tick(s: &mut Board, action_machines: &Vec<Pos>) -> i32 {
                 let (new, add) = if *count == 0 { (3, 1) } else { (count - 1, 0) };
                 s[*x][*y] = CellState::ActionMachine(new);
                 add
+            }
+            Some((x, y, CellState::Feeder)) => {
+                let con: Vec<(usize, usize, CellState)> =
+                    get_connected(*x, *y, CellStateVariant::Hot, s)
+                        .into_iter()
+                        .collect();
+                match con.get(0) {
+                    Some((hx, hy, CellState::Hot(false))) => {
+                        s[*hx][*hy] = CellState::Hot(true);
+                    }
+                    _ => {}
+                }
+                0
             }
             Some((x, y, a)) => {
                 print!("unexpected {:?}{:?}{:?}", x, y, a);
@@ -211,13 +292,49 @@ fn pos_iter_to_cells(
     return ret;
 }
 
+// something is wrong with the graph traverse?
+fn get_connected(
+    x0: usize,
+    y0: usize,
+    t: CellStateVariant,
+    m: &Board,
+) -> impl IntoIterator<Item = (usize, usize, CellState)> {
+    let mut set_size = 0;
+    let mut connected: HashSet<(usize, usize, CellState)> = neighbors(x0, y0, m)
+        .iter()
+        .filter_map(|&i| match i {
+            Some((_x, _y, a)) => {
+                if t == a.into() {
+                    i
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        })
+        .collect();
+    while connected.len() > set_size {
+        set_size = connected.len();
+        let new_connected = connected
+            .iter()
+            .flat_map(|(x, y, _)| neighbors(*x, *y, m))
+            .filter_map(|i| match i {
+                Some((_x, _y, a)) if t == a.into() => i,
+                _ => None,
+            })
+            .collect();
+        connected = connected.union(&new_connected).map(|i| i.clone()).collect();
+    }
+    return connected;
+}
+
 fn neighbors(x0: usize, y0: usize, m: &Board) -> Vec<Option<(usize, usize, CellState)>> {
     let x: i32 = x0.try_into().unwrap();
     let y: i32 = y0.try_into().unwrap();
-    let hard_neighbors = if (y % 2) == 0 {
-        [(x - 1, y + 1), (x + 1, y + 1)]
+    let hard_neighbors = if (x % 2) == 0 {
+        [(x + 1, y + 1), (x - 1, y + 1)]
     } else {
-        [(x - 1, y + 1), (x - 1, y - 1)]
+        [(x + 1, y - 1), (x - 1, y - 1)]
     };
     let mut neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)].to_vec();
     neighbors.append(&mut hard_neighbors.to_vec());
@@ -237,7 +354,7 @@ fn leak_delta(x0: usize, y0: usize, m: &Board) -> i32 {
     let ret = n
         .iter()
         .map(|i| match i {
-            Some((_, _, CellState::Hot)) => -2,
+            Some((_, _, CellState::Hot(_))) => -2,
             Some((_, _, CellState::Insulation)) => 1,
             _ => 2,
         })
@@ -250,7 +367,7 @@ fn leak_delta_ins(x0: usize, y0: usize, m: &Board) -> i32 {
     let ret = n
         .iter()
         .map(|i| match i {
-            Some((_, _, CellState::Hot)) => -1,
+            Some((_x, _y, CellState::Hot(_))) => -1,
             _ => 0,
         })
         .sum();

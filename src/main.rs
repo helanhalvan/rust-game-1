@@ -1,5 +1,5 @@
 use core::fmt;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 
 use iced::executor;
@@ -47,7 +47,6 @@ enum CellStateVariant {
     ActionMachine,
 }
 
-//there should be a way to derive this
 impl Into<CellStateVariant> for CellState {
     fn into(self) -> CellStateVariant {
         match self {
@@ -61,10 +60,39 @@ impl Into<CellStateVariant> for CellState {
     }
 }
 
-impl Into<i32> for CellStateVariant {
-    fn into(self) -> i32 {
-        self as i32
+impl Into<CellState> for CellStateVariant {
+    fn into(self) -> CellState {
+        match self {
+            CellStateVariant::Hidden => CellState::Hidden,
+            CellStateVariant::Unused => CellState::Unused,
+            CellStateVariant::Hot => CellState::Hot(false),
+            CellStateVariant::Insulation => CellState::Insulation,
+            CellStateVariant::Feeder => CellState::Feeder,
+            CellStateVariant::ActionMachine => CellState::ActionMachine(3),
+        }
     }
+}
+
+fn is_action_machine(cv: CellStateVariant) -> bool {
+    match cv {
+        CellStateVariant::Feeder => true,
+        CellStateVariant::ActionMachine => true,
+        _ => false,
+    }
+}
+fn is_tile(cv: CellStateVariant) -> bool {
+    match cv {
+        CellStateVariant::Hot => true,
+        _ => false,
+    }
+}
+fn buildable() -> Vec<CellStateVariant> {
+    vec![
+        CellStateVariant::Hot,
+        CellStateVariant::Insulation,
+        CellStateVariant::Feeder,
+        CellStateVariant::ActionMachine,
+    ]
 }
 
 impl fmt::Display for CellStateVariant {
@@ -73,28 +101,9 @@ impl fmt::Display for CellStateVariant {
     }
 }
 
-/*
-impl fmt::Display for CellStateVariant {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            CellStateVariant::Hidden => write!(f, "Hidden"),
-            CellStateVariant::Unused => write!(f, "Unused"),
-            CellStateVariant::Hot => write!(f, "Hot"),
-            CellStateVariant::Insulation => write!(f, "Insulation"),
-            CellStateVariant::Feeder => write!(f, "Feeder"),
-            CellStateVariant::ActionMachine => write!(f, "ActionMachine"),
-        }
-    }
-}
-*/
-
 #[derive(Debug, Clone, Copy)]
 enum Message {
-    Heat(usize, usize),
-    Insulate(usize, usize),
-    Explore(usize, usize),
-    BuildActionMachine(usize, usize),
-    BuildFeeder(usize, usize),
+    Build(CellStateVariant, Pos),
 }
 
 impl Application for GameState {
@@ -105,7 +114,7 @@ impl Application for GameState {
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
         let mut m1 = vec![vec![CellState::Hidden; 5]; 10];
-        m1[3][3] = CellState::Hot(false);
+        m1[3][3] = CellStateVariant::Hot.into();
         (
             GameState {
                 matrix: m1,
@@ -125,27 +134,18 @@ impl Application for GameState {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::Heat(x, y) => {
-                self.tiles = self.tiles + 1;
-                self.matrix[x][y] = CellState::Hot(false);
-                self.leak = self.leak + leak_delta(x, y, &self.matrix);
-                self.score = self.tiles as f64 / self.leak as f64;
-            }
-            Message::Insulate(x, y) => {
-                self.matrix[x][y] = CellState::Insulation;
-                self.leak = self.leak + leak_delta_ins(x, y, &self.matrix);
-                self.score = self.tiles as f64 / self.leak as f64;
-            }
-            Message::Explore(x, y) => {
-                self.matrix[x][y] = CellState::Unused;
-            }
-            Message::BuildActionMachine(x, y) => {
-                self.matrix[x][y] = CellState::ActionMachine(3);
-                self.action_machine.push((x, y))
-            }
-            Message::BuildFeeder(x, y) => {
-                self.matrix[x][y] = CellState::Feeder;
-                self.action_machine.push((x, y))
+            Message::Build(t, pos @ (x, y)) => {
+                self.matrix[x][y] = t.into();
+                if is_action_machine(t) == true {
+                    self.action_machine.push(pos);
+                }
+                if let Some(new_delta) = leak_delta(t, pos, &self.matrix) {
+                    self.leak = self.leak + new_delta;
+                    self.score = self.tiles as f64 / self.leak as f64;
+                }
+                if is_tile(t) {
+                    self.tiles = self.tiles + 1;
+                }
             }
         }
         self.actions = self.actions + game_tick(&mut self.matrix, &self.action_machine) - 1;
@@ -196,19 +196,18 @@ fn to_gui<'a>(x: usize, y: usize, actions: i32, s: CellState) -> Element<'a, Mes
     let content = match s {
         CellState::Unused => {
             if actions > 0 {
-                let button_text = "H".to_string();
-                let button_content = to_text(button_text);
-                let b1 = button(button_content).on_press(Message::Heat(x, y));
-                let button_text = "I".to_string();
-                let button_content = to_text(button_text);
-                let b2 = button(button_content).on_press(Message::Insulate(x, y));
-                let button_text = "A".to_string();
-                let button_content = to_text(button_text);
-                let b3 = button(button_content).on_press(Message::BuildActionMachine(x, y));
-                let button_text = "F".to_string();
-                let button_content = to_text(button_text);
-                let b4 = button(button_content).on_press(Message::BuildFeeder(x, y));
-                crate::Element::from(iced::widget::row!(b1, b2, b3, b4))
+                let pos = (x, y);
+                let buttons = buildable()
+                    .into_iter()
+                    .map(|i| {
+                        let button_content =
+                            to_text(i.to_string().chars().next().unwrap().to_string()); //first char of string
+                        crate::Element::from(
+                            button(button_content).on_press(Message::Build(i, pos)),
+                        )
+                    })
+                    .collect();
+                crate::Element::from(iced::widget::row(buttons))
             } else {
                 to_text("Unused".to_string())
             }
@@ -217,7 +216,8 @@ fn to_gui<'a>(x: usize, y: usize, actions: i32, s: CellState) -> Element<'a, Mes
             if actions > 0 {
                 let button_text = "Explore".to_string();
                 let button_content = to_text(button_text);
-                let b1 = button(button_content).on_press(Message::Explore(x, y));
+                let b1 = button(button_content)
+                    .on_press(Message::Build(CellStateVariant::Unused, (x, y)));
                 crate::Element::from(b1)
             } else {
                 to_text("Hidden".to_string())
@@ -247,6 +247,10 @@ fn game_tick(s: &mut Board, action_machines: &Vec<Pos>) -> i32 {
                 let con: Vec<(usize, usize, CellState)> =
                     get_connected(*x, *y, CellStateVariant::Hot, s)
                         .into_iter()
+                        .filter(|(_x, _y, i)| match i {
+                            CellState::Hot(state) => !state,
+                            _ => false,
+                        })
                         .collect();
                 match con.get(0) {
                     Some((hx, hy, CellState::Hot(false))) => {
@@ -257,7 +261,7 @@ fn game_tick(s: &mut Board, action_machines: &Vec<Pos>) -> i32 {
                 0
             }
             Some((x, y, a)) => {
-                print!("unexpected {:?}{:?}{:?}", x, y, a);
+                println!("unexpected {:?}{:?}{:?}", x, y, a);
                 unimplemented!()
             }
         })
@@ -349,27 +353,34 @@ fn neighbors(x0: usize, y0: usize, m: &Board) -> Vec<Option<(usize, usize, CellS
     return ret;
 }
 
-fn leak_delta(x0: usize, y0: usize, m: &Board) -> i32 {
-    let n = neighbors(x0, y0, &m);
-    let ret = n
-        .iter()
-        .map(|i| match i {
-            Some((_, _, CellState::Hot(_))) => -2,
-            Some((_, _, CellState::Insulation)) => 1,
-            _ => 2,
-        })
-        .sum();
-    ret
-}
-
-fn leak_delta_ins(x0: usize, y0: usize, m: &Board) -> i32 {
-    let n = neighbors(x0, y0, &m);
-    let ret = n
-        .iter()
-        .map(|i| match i {
-            Some((_x, _y, CellState::Hot(_))) => -1,
-            _ => 0,
-        })
-        .sum();
-    ret
+fn leak_delta(cv: CellStateVariant, (x, y): (usize, usize), m: &Board) -> Option<i32> {
+    if let Some((base, n_effects)) = match cv {
+        CellStateVariant::Insulation => Some((0, HashMap::from([(CellStateVariant::Hot, -1)]))),
+        CellStateVariant::Hot => Some((
+            12,
+            HashMap::from([
+                (CellStateVariant::Hot, -2),
+                (CellStateVariant::Insulation, -1),
+            ]),
+        )),
+        _ => None,
+    } {
+        let n_effects_applied: i32 = neighbors(x, y, &m)
+            .iter()
+            .map(|i| match i {
+                Some((_, _, cc)) => {
+                    let ct: CellStateVariant = (*cc).into();
+                    if let Some(d) = n_effects.get(&ct) {
+                        *d
+                    } else {
+                        0
+                    }
+                }
+                _ => 0,
+            })
+            .sum();
+        Some(base + n_effects_applied)
+    } else {
+        None
+    }
 }

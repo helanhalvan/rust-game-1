@@ -49,16 +49,11 @@ impl Application for GameState {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
-        let m1 = vec![vec![CellState::Unused; 5]; 10];
-        // TODO proper place out mines
-        let mut x: Vec<Vec<CellState>> = m1
-            .iter()
-            .map(|i| i.iter().map(|i| i.clone()).collect())
-            .collect();
-        x[3][3] = CellState::Hot;
+        let mut m1 = vec![vec![CellState::Unused; 5]; 10];
+        m1[3][3] = CellState::Hot;
         (
             GameState {
-                matrix: x,
+                matrix: m1,
                 tiles: 1,
                 leak: 12,
                 score: 1.0 / 12.0,
@@ -76,12 +71,12 @@ impl Application for GameState {
             Message::Heat(x, y) => {
                 self.tiles = self.tiles + 1;
                 self.matrix[x][y] = CellState::Hot;
-                self.leak = self.leak + leak_delta(self.matrix.clone(), neighbors(x, y));
+                self.leak = self.leak + leak_delta(x, y, &self.matrix);
                 self.score = self.tiles as f64 / self.leak as f64;
             }
             Message::Insulate(x, y) => {
                 self.matrix[x][y] = CellState::Insulation;
-                self.leak = self.leak + leak_delta_ins(self.matrix.clone(), neighbors(x, y));
+                self.leak = self.leak + leak_delta_ins(x, y, &self.matrix);
                 self.score = self.tiles as f64 / self.leak as f64;
             }
         }
@@ -127,7 +122,7 @@ impl Application for GameState {
     }
 }
 
-fn to_gui(y: usize, x: usize, s: CellState) -> Element<'static, Message> {
+fn to_gui<'a>(y: usize, x: usize, s: CellState) -> Element<'a, Message> {
     let content = match s {
         CellState::Unused => {
             let button_text = "Heat".to_string();
@@ -144,11 +139,11 @@ fn to_gui(y: usize, x: usize, s: CellState) -> Element<'static, Message> {
     crate::Element::from(container(content).width(100).height(100))
 }
 
-fn to_text(s: String) -> Element<'static, Message> {
-    crate::Element::from(text(s).size(20))
+fn to_text<'a>(s: String) -> Element<'a, Message> {
+    return crate::Element::from(text(s).size(20));
 }
 
-fn neighbors(x0: usize, y0: usize) -> Vec<(i32, i32)> {
+fn neighbors(x0: usize, y0: usize, m: &Vec<Vec<CellState>>) -> Vec<Option<CellState>> {
     let x: i32 = x0.try_into().unwrap();
     let y: i32 = y0.try_into().unwrap();
     let hard_neighbors = if ((y % 2) == 0) {
@@ -158,11 +153,7 @@ fn neighbors(x0: usize, y0: usize) -> Vec<(i32, i32)> {
     };
     let mut neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)].to_vec();
     neighbors.append(&mut hard_neighbors.to_vec());
-    return neighbors;
-}
-
-fn leak_delta(m: Vec<Vec<CellState>>, cells: Vec<(i32, i32)>) -> i32 {
-    let ret = cells
+    let ret = neighbors
         .into_iter()
         .map(|(x, y)| {
             let ret: (usize, usize) = match (x.try_into(), y.try_into()) {
@@ -173,35 +164,36 @@ fn leak_delta(m: Vec<Vec<CellState>>, cells: Vec<(i32, i32)>) -> i32 {
         })
         .map(|(x, y)| match m.get(x) {
             Some(v) => match v.get(y) {
-                Some(CellState::Hot) => -2,
-                Some(CellState::Insulation) => 1,
-                Some(CellState::Unused) => 2,
-                None => 2,
+                None => None,
+                Some(&a) => Some(a),
             },
+            None => None,
+        })
+        .collect();
+    return ret;
+}
+
+fn leak_delta(x0: usize, y0: usize, m: &Vec<Vec<CellState>>) -> i32 {
+    let n = neighbors(x0, y0, &m);
+    let ret = n
+        .iter()
+        .map(|i| match i {
+            Some(CellState::Hot) => -2,
+            Some(CellState::Insulation) => 1,
+            Some(CellState::Unused) => 2,
             None => 2,
         })
         .sum();
     ret
 }
 
-fn leak_delta_ins(m: Vec<Vec<CellState>>, cells: Vec<(i32, i32)>) -> i32 {
-    let ret = cells
-        .into_iter()
-        .map(|(x, y)| {
-            let ret: (usize, usize) = match (x.try_into(), y.try_into()) {
-                (Ok(x1), Ok(y1)) => (x1, y1),
-                _ => (usize::MAX, usize::MAX),
-            };
-            ret
-        })
-        .map(|(x, y)| match m.get(x) {
-            Some(v) => match v.get(y) {
-                Some(CellState::Hot) => -1,
-                Some(CellState::Insulation) => 0,
-                Some(CellState::Unused) => 0,
-                None => 0,
-            },
-            None => 0,
+fn leak_delta_ins(x0: usize, y0: usize, m: &Vec<Vec<CellState>>) -> i32 {
+    let n = neighbors(x0, y0, &m);
+    let ret = n
+        .iter()
+        .map(|i| match i {
+            Some(CellState::Hot) => -1,
+            _ => 0,
         })
         .sum();
     ret

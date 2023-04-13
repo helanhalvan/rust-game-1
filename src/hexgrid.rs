@@ -4,7 +4,11 @@ use crate::celldata;
 
 pub type Board = Vec<Vec<celldata::CellState>>;
 
-pub type Pos = (usize, usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Pos {
+    pub x: usize,
+    pub y: usize,
+}
 
 pub fn pos_iter_to_cells(
     pos: impl IntoIterator<Item = Pos>,
@@ -12,14 +16,17 @@ pub fn pos_iter_to_cells(
 ) -> Vec<Option<(usize, usize, celldata::CellState)>> {
     let ret = pos
         .into_iter()
-        .map(|(x, y)| {
-            let ret: (usize, usize) = match (x.try_into(), y.try_into()) {
-                (Ok(x1), Ok(y1)) => (x1, y1),
-                _ => (usize::MAX, usize::MAX),
+        .map(|Pos { x, y }| {
+            let ret = match (x.try_into(), y.try_into()) {
+                (Ok(x1), Ok(y1)) => Pos { x: x1, y: y1 },
+                _ => Pos {
+                    x: usize::MAX,
+                    y: usize::MAX,
+                },
             };
             ret
         })
-        .map(|(x, y)| match m.get(x) {
+        .map(|Pos { x, y }| match m.get(x) {
             Some(v) => match v.get(y) {
                 None => None,
                 Some(&a) => Some((x, y, a)),
@@ -79,13 +86,15 @@ pub fn neighbors(
     };
     let mut neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)].to_vec();
     neighbors.append(&mut hard_neighbors.to_vec());
-    let pos_iter = neighbors.into_iter().map(|(x, y)| {
-        let ret: (usize, usize) = match (x.try_into(), y.try_into()) {
-            (Ok(x1), Ok(y1)) => (x1, y1),
-            _ => (usize::MAX, usize::MAX),
-        };
-        ret
-    });
+    let pos_iter = neighbors
+        .into_iter()
+        .map(|(x, y)| match (x.try_into(), y.try_into()) {
+            (Ok(x1), Ok(y1)) => Pos { x: x1, y: y1 },
+            _ => Pos {
+                x: usize::MAX,
+                y: usize::MAX,
+            },
+        });
     let ret = pos_iter_to_cells(pos_iter, m);
     return ret;
 }

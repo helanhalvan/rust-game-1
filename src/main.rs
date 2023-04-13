@@ -1,3 +1,4 @@
+pub mod actionmachine;
 pub mod celldata;
 pub mod hexgrid;
 
@@ -14,11 +15,15 @@ pub fn main() -> iced::Result {
 
 struct GameState {
     matrix: hexgrid::Board,
+    resources: GameResources,
+    action_machine: actionmachine::ActionMachine,
+}
+#[derive(Debug, Clone, Copy)]
+pub struct GameResources {
     tiles: i32,
     leak: i32,
     score: f64,
     actions: i32,
-    action_machine: Vec<hexgrid::Pos>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -38,11 +43,13 @@ impl Application for GameState {
         (
             GameState {
                 matrix: m1,
-                tiles: 1,
-                leak: 12,
-                score: 1.0 / 12.0,
-                actions: 10000,
-                action_machine: vec![],
+                resources: GameResources {
+                    tiles: 1,
+                    leak: 12,
+                    score: 1.0 / 12.0,
+                    actions: 10000,
+                },
+                action_machine: actionmachine::new(),
             },
             Command::none(),
         )
@@ -53,22 +60,30 @@ impl Application for GameState {
     }
 
     fn update(&mut self, message: Message) -> Command<Message> {
+        let (r1, m1) = actionmachine::run(
+            self.resources,
+            self.action_machine.clone(),
+            self.matrix.clone(),
+        );
+        self.resources = r1;
+        self.matrix = m1;
+        //         self.resources.actions =
+        //self.resources.actions + game_tick(&mut self.matrix, &self.action_machine) - 1;
+
         match message {
-            Message::Build(t, pos @ (x, y)) => {
+            Message::Build(t, pos @ hexgrid::Pos { x, y }) => {
                 self.matrix[x][y] = t.into();
-                if celldata::is_action_machine(t) == true {
-                    self.action_machine.push(pos);
-                }
+                self.action_machine =
+                    actionmachine::maybe_insert(self.action_machine.clone(), pos, t);
                 if let Some(new_delta) = celldata::leak_delta(t, pos, &self.matrix) {
-                    self.leak = self.leak + new_delta;
-                    self.score = self.tiles as f64 / self.leak as f64;
+                    self.resources.leak = self.resources.leak + new_delta;
+                    self.resources.score = self.resources.tiles as f64 / self.resources.leak as f64;
                 }
                 if celldata::is_tile(t) {
-                    self.tiles = self.tiles + 1;
+                    self.resources.tiles = self.resources.tiles + 1;
                 }
             }
         }
-        self.actions = self.actions + game_tick(&mut self.matrix, &self.action_machine) - 1;
         Command::none()
     }
 
@@ -87,7 +102,7 @@ impl Application for GameState {
                 let mut data: Vec<Element<'static, Message>> = i
                     .iter()
                     .enumerate()
-                    .map(|(y_index, i)| to_gui(x_index, y_index, self.actions, i.clone()))
+                    .map(|(y_index, i)| to_gui(x_index, y_index, self.resources.actions, i.clone()))
                     .collect();
                 data.insert(0, padding);
                 crate::Element::from(iced::widget::Column::with_children(data))
@@ -95,10 +110,10 @@ impl Application for GameState {
             .collect();
         let matrix = crate::Element::from(iced::widget::Row::with_children(x));
         // TODO some standard way of handling gamestate numbers that needs displaying
-        let tiles_e = to_text(format!("Tiles: {} ", self.tiles).to_string());
-        let leak_e = to_text(format!("Leak: {} ", self.leak).to_string());
-        let score_e = to_text(format!("Score: {}", self.score).to_string());
-        let actions_e = to_text(format!("Actions: {}", self.actions).to_string());
+        let tiles_e = to_text(format!("Tiles: {} ", self.resources.tiles).to_string());
+        let leak_e = to_text(format!("Leak: {} ", self.resources.leak).to_string());
+        let score_e = to_text(format!("Score: {}", self.resources.score).to_string());
+        let actions_e = to_text(format!("Actions: {}", self.resources.actions).to_string());
         let score = crate::Element::from(iced::widget::Row::with_children(vec![
             tiles_e, leak_e, score_e, actions_e,
         ]));
@@ -116,7 +131,7 @@ fn to_gui<'a>(x: usize, y: usize, actions: i32, s: celldata::CellState) -> Eleme
     let content = match s {
         celldata::CellState::Unused => {
             if actions > 0 {
-                let pos = (x, y);
+                let pos = hexgrid::Pos { x, y };
                 let buttons = celldata::buildable()
                     .into_iter()
                     .map(|i| {
@@ -136,56 +151,25 @@ fn to_gui<'a>(x: usize, y: usize, actions: i32, s: celldata::CellState) -> Eleme
             if actions > 0 {
                 let button_text = "Explore".to_string();
                 let button_content = to_text(button_text);
-                let b1 = button(button_content)
-                    .on_press(Message::Build(celldata::CellStateVariant::Unused, (x, y)));
+                let b1 = button(button_content).on_press(Message::Build(
+                    celldata::CellStateVariant::Unused,
+                    hexgrid::Pos { x, y },
+                ));
                 crate::Element::from(b1)
             } else {
                 to_text("Hidden".to_string())
             }
         }
         celldata::CellState::ActionMachine(c) => to_text(format!("A {}", c).to_string()),
-        celldata::CellState::Hot(state) => to_text(format!("Hot {state}").to_string()),
+        celldata::CellState::Hot { slot: state, .. } => {
+            to_text(format!("Hot {:?}", state).to_string())
+        }
         a => {
             let v: celldata::CellStateVariant = a.into();
             to_text(v.to_string())
         }
     };
     crate::Element::from(container(content).width(100).height(100))
-}
-
-fn game_tick(s: &mut hexgrid::Board, action_machines: &Vec<hexgrid::Pos>) -> i32 {
-    let ret = hexgrid::pos_iter_to_cells(action_machines.clone(), s);
-    ret.iter()
-        .map(|i| match i {
-            None => 0,
-            Some((x, y, celldata::CellState::ActionMachine(count))) => {
-                let (new, add) = if *count == 0 { (3, 1) } else { (count - 1, 0) };
-                s[*x][*y] = celldata::CellState::ActionMachine(new);
-                add
-            }
-            Some((x, y, celldata::CellState::Feeder)) => {
-                let con: Vec<(usize, usize, celldata::CellState)> =
-                    hexgrid::get_connected(*x, *y, celldata::CellStateVariant::Hot, s)
-                        .into_iter()
-                        .filter(|(_x, _y, i)| match i {
-                            celldata::CellState::Hot(state) => !state,
-                            _ => false,
-                        })
-                        .collect();
-                match con.get(0) {
-                    Some((hx, hy, celldata::CellState::Hot(false))) => {
-                        s[*hx][*hy] = celldata::CellState::Hot(true);
-                    }
-                    _ => {}
-                }
-                0
-            }
-            Some((x, y, a)) => {
-                println!("unexpected {:?}{:?}{:?}", x, y, a);
-                unimplemented!()
-            }
-        })
-        .sum()
 }
 
 fn to_text<'a>(s: String) -> Element<'a, Message> {

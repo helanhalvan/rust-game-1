@@ -1,5 +1,5 @@
 use core::fmt;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::hexgrid;
 
@@ -8,13 +8,20 @@ use crate::hexgrid;
 pub enum CellState {
     Hidden,
     Unused,
-    Hot(bool),
+    Hot { slot: Slot },
     Insulation,
     Feeder,
     ActionMachine(i32),
 }
 
-//no data variant of CellState, ECS type key if this was a proper ECS
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Slot {
+    Empty,
+    Done,
+    Progress(i32),
+}
+
+//no data variant of CellState
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CellStateVariant {
     Hidden,
@@ -36,7 +43,7 @@ impl Into<CellStateVariant> for CellState {
         match self {
             CellState::Hidden => CellStateVariant::Hidden,
             CellState::Unused => CellStateVariant::Unused,
-            CellState::Hot(_) => CellStateVariant::Hot,
+            CellState::Hot { .. } => CellStateVariant::Hot,
             CellState::Insulation => CellStateVariant::Insulation,
             CellState::Feeder => CellStateVariant::Feeder,
             CellState::ActionMachine(_) => CellStateVariant::ActionMachine,
@@ -49,21 +56,14 @@ impl Into<CellState> for CellStateVariant {
         match self {
             CellStateVariant::Hidden => CellState::Hidden,
             CellStateVariant::Unused => CellState::Unused,
-            CellStateVariant::Hot => CellState::Hot(false),
+            CellStateVariant::Hot => CellState::Hot { slot: Slot::Empty },
             CellStateVariant::Insulation => CellState::Insulation,
             CellStateVariant::Feeder => CellState::Feeder,
             CellStateVariant::ActionMachine => CellState::ActionMachine(3),
         }
     }
 }
-// needs to run code periodically
-pub fn is_action_machine(cv: CellStateVariant) -> bool {
-    match cv {
-        CellStateVariant::Feeder => true,
-        CellStateVariant::ActionMachine => true,
-        _ => false,
-    }
-}
+
 pub fn is_tile(cv: CellStateVariant) -> bool {
     match cv {
         CellStateVariant::Hot => true,
@@ -79,7 +79,11 @@ pub fn buildable() -> Vec<CellStateVariant> {
     ]
 }
 
-pub fn leak_delta(cv: CellStateVariant, (x, y): (usize, usize), m: &hexgrid::Board) -> Option<i32> {
+pub fn leak_delta(
+    cv: CellStateVariant,
+    hexgrid::Pos { x, y }: hexgrid::Pos,
+    m: &hexgrid::Board,
+) -> Option<i32> {
     if let Some((base, n_effects)) = match cv {
         CellStateVariant::Insulation => Some((0, HashMap::from([(CellStateVariant::Hot, -1)]))),
         CellStateVariant::Hot => Some((

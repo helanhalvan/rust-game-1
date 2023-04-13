@@ -24,11 +24,13 @@ pub struct GameResources {
     leak: i32,
     score: f64,
     actions: i32,
+    wood: i32,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
     Build(celldata::CellStateVariant, hexgrid::Pos),
+    EndTurn,
 }
 
 impl Application for GameState {
@@ -38,16 +40,16 @@ impl Application for GameState {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
-        let mut m1 = vec![vec![celldata::CellState::Hidden; 5]; 10];
-        m1[3][3] = celldata::CellStateVariant::Hot.into();
+        let m1 = vec![vec![celldata::CellState::Hidden; 5]; 10];
         (
             GameState {
                 matrix: m1,
                 resources: GameResources {
-                    tiles: 1,
-                    leak: 12,
-                    score: 1.0 / 12.0,
-                    actions: 10000,
+                    tiles: 0,
+                    leak: 1,
+                    score: 0.0,
+                    actions: 10,
+                    wood: 400,
                 },
                 action_machine: actionmachine::new(),
             },
@@ -60,18 +62,9 @@ impl Application for GameState {
     }
 
     fn update(&mut self, message: Message) -> Command<Message> {
-        let (r1, m1) = actionmachine::run(
-            self.resources,
-            self.action_machine.clone(),
-            self.matrix.clone(),
-        );
-        self.resources = r1;
-        self.matrix = m1;
-        //         self.resources.actions =
-        //self.resources.actions + game_tick(&mut self.matrix, &self.action_machine) - 1;
-
         match message {
             Message::Build(t, pos @ hexgrid::Pos { x, y }) => {
+                self.resources.actions = self.resources.actions - 1;
                 self.matrix[x][y] = t.into();
                 self.action_machine =
                     actionmachine::maybe_insert(self.action_machine.clone(), pos, t);
@@ -82,6 +75,15 @@ impl Application for GameState {
                 if celldata::is_tile(t) {
                     self.resources.tiles = self.resources.tiles + 1;
                 }
+            }
+            Message::EndTurn => {
+                let (r1, m1) = actionmachine::run(
+                    self.resources,
+                    self.action_machine.clone(),
+                    self.matrix.clone(),
+                );
+                self.resources = r1;
+                self.matrix = m1;
             }
         }
         Command::none()
@@ -114,10 +116,16 @@ impl Application for GameState {
         let leak_e = to_text(format!("Leak: {} ", self.resources.leak).to_string());
         let score_e = to_text(format!("Score: {}", self.resources.score).to_string());
         let actions_e = to_text(format!("Actions: {}", self.resources.actions).to_string());
+        let wood_e = to_text(format!("Wood: {}", self.resources.wood).to_string());
         let score = crate::Element::from(iced::widget::Row::with_children(vec![
-            tiles_e, leak_e, score_e, actions_e,
+            tiles_e, leak_e, score_e, actions_e, wood_e,
         ]));
-        let content = iced::widget::Column::with_children(vec![matrix, score]);
+
+        let end_turn_content = to_text("End Turn".to_string());
+        let buttom_buttons =
+            crate::Element::from(button(end_turn_content).on_press(Message::EndTurn));
+
+        let content = iced::widget::Column::with_children(vec![matrix, score, buttom_buttons]);
 
         container(content)
             .width(Length::Fill)

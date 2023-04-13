@@ -4,13 +4,14 @@ use crate::{celldata, hexgrid, GameResources};
 pub type ActionMachine = Vec<Vec<hexgrid::Pos>>;
 
 type ActionMachinePrio = usize;
-pub static ACTION_MAX_PRIO: ActionMachinePrio = 3;
+pub static ACTION_MAX_PRIO: ActionMachinePrio = 4;
 
 pub fn prio(cv: celldata::CellStateVariant) -> Option<ActionMachinePrio> {
     match cv {
         celldata::CellStateVariant::ActionMachine => Some(0),
-        celldata::CellStateVariant::Feeder => Some(1),
+        celldata::CellStateVariant::Seller => Some(1),
         celldata::CellStateVariant::Hot => Some(2),
+        celldata::CellStateVariant::Feeder => Some(3),
         _ => None,
     }
 }
@@ -35,7 +36,7 @@ pub fn run(
     m: ActionMachine,
     mut b: hexgrid::Board,
 ) -> (GameResources, hexgrid::Board) {
-    r.actions = r.actions - 1;
+    r.wood = r.wood - r.leak;
     for v in m {
         for i in hexgrid::pos_iter_to_cells(v, &b) {
             match i {
@@ -96,6 +97,35 @@ pub fn run(
                     b[x][y] = celldata::CellState::Hot {
                         slot: celldata::Slot::Progress(p - 1),
                     };
+                }
+                Some((x, y, celldata::CellState::Seller)) => {
+                    let con: Vec<(usize, usize, celldata::CellState)> =
+                        hexgrid::get_connected(x, y, celldata::CellStateVariant::Hot, &b)
+                            .into_iter()
+                            .filter(|(_x, _y, i)| match i {
+                                celldata::CellState::Hot {
+                                    slot: celldata::Slot::Done,
+                                    ..
+                                } => true,
+                                _ => false,
+                            })
+                            .collect();
+                    match con.get(0) {
+                        Some((
+                            hx,
+                            hy,
+                            celldata::CellState::Hot {
+                                slot: celldata::Slot::Done,
+                            },
+                        )) => {
+                            b[*hx][*hy] = celldata::CellState::Hot {
+                                slot: celldata::Slot::Empty,
+                            };
+                            r.actions = r.actions + 1;
+                            r.wood = r.wood + 40;
+                        }
+                        _ => {}
+                    }
                 }
                 None => {
                     println!("unexpected NONE");

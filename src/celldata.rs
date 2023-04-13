@@ -12,6 +12,7 @@ pub enum CellState {
     Insulation,
     Feeder,
     ActionMachine(i32),
+    Seller,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -30,6 +31,7 @@ pub enum CellStateVariant {
     Insulation,
     Feeder,
     ActionMachine,
+    Seller,
 }
 
 impl fmt::Display for CellStateVariant {
@@ -47,6 +49,7 @@ impl Into<CellStateVariant> for CellState {
             CellState::Insulation => CellStateVariant::Insulation,
             CellState::Feeder => CellStateVariant::Feeder,
             CellState::ActionMachine(_) => CellStateVariant::ActionMachine,
+            CellState::Seller => CellStateVariant::Seller,
         }
     }
 }
@@ -60,6 +63,7 @@ impl Into<CellState> for CellStateVariant {
             CellStateVariant::Insulation => CellState::Insulation,
             CellStateVariant::Feeder => CellState::Feeder,
             CellStateVariant::ActionMachine => CellState::ActionMachine(3),
+            CellStateVariant::Seller => CellState::Seller,
         }
     }
 }
@@ -76,6 +80,7 @@ pub fn buildable() -> Vec<CellStateVariant> {
         CellStateVariant::Insulation,
         CellStateVariant::Feeder,
         CellStateVariant::ActionMachine,
+        CellStateVariant::Seller,
     ]
 }
 
@@ -89,7 +94,7 @@ pub fn leak_delta(
         CellStateVariant::Hot => Some((
             12,
             HashMap::from([
-                (CellStateVariant::Hot, -2),
+                (CellStateVariant::Hot, -4),
                 (CellStateVariant::Insulation, -1),
             ]),
         )),

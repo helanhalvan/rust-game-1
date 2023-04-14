@@ -1,10 +1,23 @@
 pub mod actionmachine;
 pub mod celldata;
+pub mod css;
 pub mod hexgrid;
 
+use iced::alignment::{Horizontal, Vertical};
 use iced::executor;
 use iced::widget::{button, container, text};
-use iced::{Application, Command, Element, Length, Settings, Theme};
+use iced::{Application, Command, Length, Settings};
+use widget::Element;
+
+mod widget {
+    use crate::css::Theme;
+    //use iced::Theme;
+
+    pub type Renderer = iced::Renderer<Theme>;
+    pub type Element<'a, Message> = iced::Element<'a, Message, Renderer>;
+    pub type Container<'a, Message> = iced::widget::Container<'a, Message, Renderer>;
+    pub type Button<'a, Message> = iced::widget::Button<'a, Message, Renderer>;
+}
 
 pub fn main() -> iced::Result {
     GameState::run(Settings {
@@ -36,7 +49,7 @@ pub enum Message {
 impl Application for GameState {
     type Executor = executor::Default;
     type Message = Message;
-    type Theme = Theme;
+    type Theme = css::Theme;
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
@@ -133,7 +146,7 @@ fn to_gui<'a>(x: usize, y: usize, actions: i32, s: celldata::CellState) -> Eleme
         celldata::CellState::Unused => {
             if actions > 0 {
                 let pos = hexgrid::Pos { x, y };
-                let grid = to_rec(celldata::buildable(), 3, 4)
+                let grid = to_rectangle(celldata::buildable(), 3, 4)
                     .iter()
                     .map(|v| {
                         crate::Element::from(iced::widget::row(
@@ -176,28 +189,36 @@ fn to_gui<'a>(x: usize, y: usize, actions: i32, s: celldata::CellState) -> Eleme
             to_text(v.to_string())
         }
     };
-    crate::Element::from(container(content).width(100).height(100))
+    crate::Element::from(
+        container(content)
+            .width(100)
+            .height(100)
+            .style(css::Container::Bordered)
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center),
+    )
 }
 
 // example, w=2, h=3, s=[1,2,3,4,5]
 // |1,2|
 // |3,4|
 // |5|
-pub fn to_rec<T: Clone>(
+pub fn to_rectangle<T: Clone>(
     source: impl IntoIterator<Item = T>,
     height: usize,
     width: usize,
 ) -> Vec<Vec<T>> {
-    source
-        .into_iter()
-        .fold(vec![Vec::new(); height], |mut a, b| {
-            let mut next_empty = 0;
-            while a[next_empty].len() == width {
+    let (_, ret) = source.into_iter().fold(
+        (0, vec![Vec::new(); height]),
+        |(mut next_empty, mut a), b| {
+            if a[next_empty].len() == width {
                 next_empty = next_empty + 1;
             }
             a[next_empty].push(b);
-            a
-        })
+            (next_empty, a)
+        },
+    );
+    ret
 }
 
 fn to_text<'a>(s: String) -> Element<'a, Message> {

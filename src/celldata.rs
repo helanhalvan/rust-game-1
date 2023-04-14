@@ -1,5 +1,5 @@
 use core::fmt;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::hexgrid;
 
@@ -16,14 +16,6 @@ pub enum CellState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Slot {
-    Empty,
-    Done,
-    Progress(i32),
-}
-
-//no data variant of CellState
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CellStateVariant {
     Hidden,
     Unused,
@@ -32,12 +24,6 @@ pub enum CellStateVariant {
     Feeder,
     ActionMachine,
     Seller,
-}
-
-impl fmt::Display for CellStateVariant {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
 }
 
 impl Into<CellStateVariant> for CellState {
@@ -53,6 +39,20 @@ impl Into<CellStateVariant> for CellState {
         }
     }
 }
+
+impl fmt::Display for CellStateVariant {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Slot {
+    Empty,
+    Done,
+    Progress(i32),
+}
+
 // Cell content initalizer/constructor
 impl Into<CellState> for CellStateVariant {
     fn into(self) -> CellState {

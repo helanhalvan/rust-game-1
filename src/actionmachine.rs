@@ -41,7 +41,7 @@ pub fn run(
         for i in hexgrid::pos_iter_to_cells(v, &b) {
             match i {
                 Some((x, y, celldata::CellState::ActionMachine(0))) => {
-                    r.actions = r.actions - 1;
+                    r.actions = r.actions + 1;
                     b[x][y] = celldata::CellState::ActionMachine(3);
                 }
                 Some((x, y, celldata::CellState::ActionMachine(count))) => {

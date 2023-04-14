@@ -22,7 +22,7 @@ struct GameState {
 pub struct GameResources {
     tiles: i32,
     leak: i32,
-    score: f64,
+    heat_efficency: f64,
     actions: i32,
     wood: i32,
 }
@@ -47,7 +47,7 @@ impl Application for GameState {
                 resources: GameResources {
                     tiles: 0,
                     leak: 1,
-                    score: 0.0,
+                    heat_efficency: 0.0,
                     actions: 10,
                     wood: 400,
                 },
@@ -70,7 +70,8 @@ impl Application for GameState {
                     actionmachine::maybe_insert(self.action_machine.clone(), pos, t);
                 if let Some(new_delta) = celldata::leak_delta(t, pos, &self.matrix) {
                     self.resources.leak = self.resources.leak + new_delta;
-                    self.resources.score = self.resources.tiles as f64 / self.resources.leak as f64;
+                    self.resources.heat_efficency =
+                        self.resources.tiles as f64 / self.resources.leak as f64;
                 }
                 if celldata::is_tile(t) {
                     self.resources.tiles = self.resources.tiles + 1;
@@ -111,21 +112,13 @@ impl Application for GameState {
             })
             .collect();
         let matrix = crate::Element::from(iced::widget::Row::with_children(x));
-        // TODO some standard way of handling gamestate numbers that needs displaying
-        let tiles_e = to_text(format!("Tiles: {} ", self.resources.tiles).to_string());
-        let leak_e = to_text(format!("Leak: {} ", self.resources.leak).to_string());
-        let score_e = to_text(format!("Score: {}", self.resources.score).to_string());
-        let actions_e = to_text(format!("Actions: {}", self.resources.actions).to_string());
-        let wood_e = to_text(format!("Wood: {}", self.resources.wood).to_string());
-        let score = crate::Element::from(iced::widget::Row::with_children(vec![
-            tiles_e, leak_e, score_e, actions_e, wood_e,
-        ]));
-
+        // TODO, there should probably be a macro converting resources into something prettier
+        let resources = crate::Element::from(to_text(format!("{:?}", self.resources).to_string()));
         let end_turn_content = to_text("End Turn".to_string());
         let buttom_buttons =
             crate::Element::from(button(end_turn_content).on_press(Message::EndTurn));
 
-        let content = iced::widget::Column::with_children(vec![matrix, score, buttom_buttons]);
+        let content = iced::widget::Column::with_children(vec![matrix, resources, buttom_buttons]);
 
         container(content)
             .width(Length::Fill)
@@ -140,17 +133,23 @@ fn to_gui<'a>(x: usize, y: usize, actions: i32, s: celldata::CellState) -> Eleme
         celldata::CellState::Unused => {
             if actions > 0 {
                 let pos = hexgrid::Pos { x, y };
-                let buttons = celldata::buildable()
-                    .into_iter()
-                    .map(|i| {
-                        let button_content =
-                            to_text(i.to_string().chars().next().unwrap().to_string()); //first char of string
-                        crate::Element::from(
-                            button(button_content).on_press(Message::Build(i, pos)),
-                        )
+                let grid = to_rec(celldata::buildable(), 3, 4)
+                    .iter()
+                    .map(|v| {
+                        crate::Element::from(iced::widget::row(
+                            v.into_iter()
+                                .map(|i| {
+                                    let button_content =
+                                        to_text(i.to_string().chars().next().unwrap().to_string());
+                                    crate::Element::from(
+                                        button(button_content).on_press(Message::Build(*i, pos)),
+                                    )
+                                })
+                                .collect(),
+                        ))
                     })
                     .collect();
-                crate::Element::from(iced::widget::row(buttons))
+                crate::Element::from(iced::widget::column(grid))
             } else {
                 to_text("Unused".to_string())
             }
@@ -178,6 +177,27 @@ fn to_gui<'a>(x: usize, y: usize, actions: i32, s: celldata::CellState) -> Eleme
         }
     };
     crate::Element::from(container(content).width(100).height(100))
+}
+
+// example, w=2, h=3, s=[1,2,3,4,5]
+// |1,2|
+// |3,4|
+// |5|
+pub fn to_rec<T: Clone>(
+    source: impl IntoIterator<Item = T>,
+    height: usize,
+    width: usize,
+) -> Vec<Vec<T>> {
+    source
+        .into_iter()
+        .fold(vec![Vec::new(); height], |mut a, b| {
+            let mut next_empty = 0;
+            while a[next_empty].len() == width {
+                next_empty = next_empty + 1;
+            }
+            a[next_empty].push(b);
+            a
+        })
 }
 
 fn to_text<'a>(s: String) -> Element<'a, Message> {

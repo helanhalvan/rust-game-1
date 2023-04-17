@@ -19,11 +19,11 @@ impl container::StyleSheet for Theme {
     fn appearance(&self, style: &Self::Style) -> container::Appearance {
         match style {
             Container::Default => container::Appearance {
-                background: color!(0x0, 0x88, 0x0).into(),
+                background: color!(0x22, 0x22, 0x88).into(),
                 ..Default::default()
             },
             Container::Bordered => container::Appearance {
-                background: color!(0x0, 0x88, 0x88).into(),
+                background: color!(0x44, 0x88, 0x44).into(),
                 border_color: color!(0, 0, 0),
                 border_width: 1.0,
                 border_radius: 4.0,
@@ -57,11 +57,11 @@ impl button::StyleSheet for Theme {
 
     fn active(&self, _style: &Self::Style) -> button::Appearance {
         button::Appearance {
-            background: color!(0x88, 0x88, 0x00).into(),
+            background: color!(0x44, 0x22, 0x11).into(),
             border_width: 1.0,
             border_radius: 4.0,
-            border_color: color!(0xff, 0xff, 0xff),
-            text_color: color!(0xff, 0xff, 0xff),
+            border_color: color!(0xff, 0x44, 0x44),
+            text_color: color!(0xff, 0x44, 0x44),
             ..Default::default()
         }
     }

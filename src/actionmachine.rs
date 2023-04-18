@@ -31,6 +31,135 @@ pub fn maybe_insert(
     m
 }
 
+pub type InProgressWait = u32;
+
+fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
+    match cv {
+        celldata::CellStateVariant::ActionMachine => 3,
+        celldata::CellStateVariant::Hot => 5,
+        a => {
+            println!("unexpected {:?}", a);
+            unimplemented!()
+        }
+    }
+}
+
+fn do_progress_done(
+    p @ hexgrid::Pos { x, y }: hexgrid::Pos,
+    cv: celldata::CellStateVariant,
+    mut r: GameResources,
+    mut b: hexgrid::Board,
+) -> (GameResources, hexgrid::Board) {
+    let new_cell = match cv {
+        celldata::CellStateVariant::ActionMachine => {
+            r.actions = r.actions + 1;
+            celldata::CellState::InProgress {
+                variant: cv,
+                countdown: in_progress_max(cv),
+            }
+        }
+        celldata::CellStateVariant::Hot => celldata::CellState::Hot {
+            slot: celldata::Slot::Done,
+        },
+        a => {
+            println!("unexpected {:?}{:?}{:?}", x, y, a);
+            unimplemented!()
+        }
+    };
+    hexgrid::set(p, new_cell, &mut b);
+    (r, b)
+}
+
+fn do_tick(
+    p @ hexgrid::Pos { x, y }: hexgrid::Pos,
+    c: celldata::CellState,
+    mut r: GameResources,
+    mut b: hexgrid::Board,
+) -> (GameResources, hexgrid::Board) {
+    match c {
+        celldata::CellState::InProgress {
+            variant,
+            countdown: 0,
+        } => {
+            let (r1, b1) = do_progress_done(p, variant, r, b);
+            r = r1;
+            b = b1;
+        }
+        celldata::CellState::InProgress {
+            variant, countdown, ..
+        } => {
+            let new_cell = celldata::CellState::InProgress {
+                countdown: countdown - 1,
+                variant,
+            };
+            hexgrid::set(p, new_cell, &mut b);
+        }
+        celldata::CellState::Feeder => {
+            let con: Vec<(hexgrid::Pos, celldata::CellState)> =
+                hexgrid::get_connected(p, celldata::is_hot, &b)
+                    .into_iter()
+                    .filter(|(_p, i)| match i {
+                        celldata::CellState::Hot {
+                            slot: celldata::Slot::Empty,
+                            ..
+                        } => true,
+                        _ => false,
+                    })
+                    .collect();
+            match con.get(0) {
+                Some((
+                    hp,
+                    celldata::CellState::Hot {
+                        slot: celldata::Slot::Empty,
+                    },
+                )) => {
+                    let new_cell = celldata::CellState::InProgress {
+                        variant: celldata::CellStateVariant::Hot,
+                        countdown: in_progress_max(celldata::CellStateVariant::Hot),
+                    };
+                    hexgrid::set(*hp, new_cell, &mut b);
+                }
+                _ => {}
+            }
+        }
+        celldata::CellState::Seller => {
+            let con: Vec<(hexgrid::Pos, celldata::CellState)> =
+                hexgrid::get_connected(p, celldata::is_hot, &b)
+                    .into_iter()
+                    .filter(|(_p, i)| match i {
+                        celldata::CellState::Hot {
+                            slot: celldata::Slot::Done,
+                            ..
+                        } => true,
+                        _ => false,
+                    })
+                    .collect();
+            match con.get(0) {
+                Some((
+                    hp,
+                    celldata::CellState::Hot {
+                        slot: celldata::Slot::Done,
+                    },
+                )) => {
+                    let new_cell = celldata::CellState::Hot {
+                        slot: celldata::Slot::Empty,
+                    };
+                    hexgrid::set(*hp, new_cell, &mut b);
+                    r.actions = r.actions + 1;
+                    r.wood = r.wood + 40;
+                }
+                _ => {}
+            }
+        }
+        celldata::CellState::Hot { .. } => {}
+        a => {
+            println!("unexpected {:?}{:?}{:?}", x, y, a);
+            unimplemented!()
+        }
+    }
+    (r, b)
+}
+
 pub fn run(
     mut r: GameResources,
     m: ActionMachine,
@@ -40,99 +169,13 @@ pub fn run(
     for v in m {
         for i in hexgrid::pos_iter_to_cells(v, &b) {
             match i {
-                Some((x, y, celldata::CellState::ActionMachine(0))) => {
-                    r.actions = r.actions + 1;
-                    b[x][y] = celldata::CellState::ActionMachine(3);
-                }
-                Some((x, y, celldata::CellState::ActionMachine(count))) => {
-                    b[x][y] = celldata::CellState::ActionMachine(count - 1);
-                }
-                Some((x, y, celldata::CellState::Feeder)) => {
-                    let con: Vec<(usize, usize, celldata::CellState)> =
-                        hexgrid::get_connected(x, y, celldata::CellStateVariant::Hot, &b)
-                            .into_iter()
-                            .filter(|(_x, _y, i)| match i {
-                                celldata::CellState::Hot {
-                                    slot: celldata::Slot::Empty,
-                                    ..
-                                } => true,
-                                _ => false,
-                            })
-                            .collect();
-                    match con.get(0) {
-                        Some((
-                            hx,
-                            hy,
-                            celldata::CellState::Hot {
-                                slot: celldata::Slot::Empty,
-                            },
-                        )) => {
-                            b[*hx][*hy] = celldata::CellState::Hot {
-                                slot: celldata::Slot::Progress(5),
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                Some((_x, _y, celldata::CellState::Hot { slot: s }))
-                    if s == celldata::Slot::Done || s == celldata::Slot::Empty => {}
-                Some((
-                    x,
-                    y,
-                    celldata::CellState::Hot {
-                        slot: celldata::Slot::Progress(1),
-                    },
-                )) => {
-                    b[x][y] = celldata::CellState::Hot {
-                        slot: celldata::Slot::Done,
-                    };
-                }
-                Some((
-                    x,
-                    y,
-                    celldata::CellState::Hot {
-                        slot: celldata::Slot::Progress(p),
-                    },
-                )) => {
-                    b[x][y] = celldata::CellState::Hot {
-                        slot: celldata::Slot::Progress(p - 1),
-                    };
-                }
-                Some((x, y, celldata::CellState::Seller)) => {
-                    let con: Vec<(usize, usize, celldata::CellState)> =
-                        hexgrid::get_connected(x, y, celldata::CellStateVariant::Hot, &b)
-                            .into_iter()
-                            .filter(|(_x, _y, i)| match i {
-                                celldata::CellState::Hot {
-                                    slot: celldata::Slot::Done,
-                                    ..
-                                } => true,
-                                _ => false,
-                            })
-                            .collect();
-                    match con.get(0) {
-                        Some((
-                            hx,
-                            hy,
-                            celldata::CellState::Hot {
-                                slot: celldata::Slot::Done,
-                            },
-                        )) => {
-                            b[*hx][*hy] = celldata::CellState::Hot {
-                                slot: celldata::Slot::Empty,
-                            };
-                            r.actions = r.actions + 1;
-                            r.wood = r.wood + 40;
-                        }
-                        _ => {}
-                    }
+                Some((pos, cell)) => {
+                    let (r1, b1) = do_tick(pos, cell, r, b);
+                    b = b1;
+                    r = r1;
                 }
                 None => {
                     println!("unexpected NONE");
-                    unimplemented!()
-                }
-                Some((x, y, a)) => {
-                    println!("unexpected {:?}{:?}{:?}", x, y, a);
                     unimplemented!()
                 }
             }

@@ -1,17 +1,22 @@
 use core::fmt;
 use std::collections::HashMap;
 
-use crate::hexgrid;
+use crate::{actionmachine, hexgrid};
 
 //Data in a cell (position) on the board
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CellState {
     Hidden,
     Unused,
-    Hot { slot: Slot },
+    Hot {
+        slot: Slot,
+    },
     Insulation,
     Feeder,
-    ActionMachine(i32),
+    InProgress {
+        variant: CellStateVariant,
+        countdown: actionmachine::InProgressWait,
+    },
     Seller,
 }
 
@@ -24,6 +29,7 @@ pub enum CellStateVariant {
     Feeder,
     ActionMachine,
     Seller,
+    InProgress,
 }
 
 impl Into<CellStateVariant> for CellState {
@@ -34,8 +40,8 @@ impl Into<CellStateVariant> for CellState {
             CellState::Hot { .. } => CellStateVariant::Hot,
             CellState::Insulation => CellStateVariant::Insulation,
             CellState::Feeder => CellStateVariant::Feeder,
-            CellState::ActionMachine(_) => CellStateVariant::ActionMachine,
             CellState::Seller => CellStateVariant::Seller,
+            CellState::InProgress { .. } => CellStateVariant::InProgress,
         }
     }
 }
@@ -50,20 +56,31 @@ impl fmt::Display for CellStateVariant {
 pub enum Slot {
     Empty,
     Done,
-    Progress(i32),
+}
+
+pub fn is_hot(c: CellState) -> bool {
+    match c {
+        CellState::Hot { .. } => true,
+        CellState::InProgress { variant, .. } if variant == CellStateVariant::Hot => true,
+        _ => false,
+    }
 }
 
 // Cell content initalizer/constructor
-impl Into<CellState> for CellStateVariant {
-    fn into(self) -> CellState {
-        match self {
-            CellStateVariant::Hidden => CellState::Hidden,
-            CellStateVariant::Unused => CellState::Unused,
-            CellStateVariant::Hot => CellState::Hot { slot: Slot::Empty },
-            CellStateVariant::Insulation => CellState::Insulation,
-            CellStateVariant::Feeder => CellState::Feeder,
-            CellStateVariant::ActionMachine => CellState::ActionMachine(3),
-            CellStateVariant::Seller => CellState::Seller,
+pub fn build(cv: CellStateVariant) -> CellState {
+    match cv {
+        CellStateVariant::Unused => CellState::Unused,
+        CellStateVariant::Hot => CellState::Hot { slot: Slot::Empty },
+        CellStateVariant::Insulation => CellState::Insulation,
+        CellStateVariant::Feeder => CellState::Feeder,
+        CellStateVariant::ActionMachine => CellState::InProgress {
+            variant: cv,
+            countdown: 3,
+        },
+        CellStateVariant::Seller => CellState::Seller,
+        _ => {
+            println!("unexpected {:?}", cv);
+            unimplemented!()
         }
     }
 }
@@ -84,11 +101,7 @@ pub fn buildable() -> Vec<CellStateVariant> {
     ]
 }
 
-pub fn leak_delta(
-    cv: CellStateVariant,
-    hexgrid::Pos { x, y }: hexgrid::Pos,
-    m: &hexgrid::Board,
-) -> Option<i32> {
+pub fn leak_delta(cv: CellStateVariant, p: hexgrid::Pos, m: &hexgrid::Board) -> Option<i32> {
     if let Some((base, n_effects)) = match cv {
         CellStateVariant::Insulation => Some((0, HashMap::from([(CellStateVariant::Hot, -1)]))),
         CellStateVariant::Hot => Some((
@@ -100,10 +113,10 @@ pub fn leak_delta(
         )),
         _ => None,
     } {
-        let n_effects_applied: i32 = hexgrid::neighbors(x, y, &m)
+        let n_effects_applied: i32 = hexgrid::neighbors(p, &m)
             .iter()
             .map(|i| match i {
-                Some((_, _, cc)) => {
+                Some((_, cc)) => {
                     let ct: CellStateVariant = (*cc).into();
                     if let Some(d) = n_effects.get(&ct) {
                         *d

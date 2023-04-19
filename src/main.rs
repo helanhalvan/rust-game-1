@@ -2,6 +2,7 @@ pub mod actionmachine;
 pub mod celldata;
 pub mod css;
 pub mod hexgrid;
+pub mod make_imgs;
 pub mod visualize_cell;
 
 use iced::executor;
@@ -19,11 +20,20 @@ mod widget {
     //pub type Button<'a, Message> = iced::widget::Button<'a, Message, Renderer>;
 }
 
-pub fn main() -> iced::Result {
-    GameState::run(Settings {
-        antialiasing: true,
-        ..Settings::default()
-    })
+use std::{env, vec};
+
+pub fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() == 1 {
+        let _ = GameState::run(Settings {
+            antialiasing: true,
+            ..Settings::default()
+        });
+    } else if args[1] == "images" {
+        make_imgs::make_imgs();
+    } else {
+        dbg!(args);
+    }
 }
 
 struct GameState {

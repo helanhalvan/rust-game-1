@@ -33,7 +33,7 @@ pub fn maybe_insert(
 
 pub type InProgressWait = u32;
 
-fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
+pub fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
     match cv {
         celldata::CellStateVariant::ActionMachine => 3,
         celldata::CellStateVariant::Hot => 5,
@@ -167,7 +167,7 @@ pub fn run(
 ) -> (GameResources, hexgrid::Board) {
     r.wood = r.wood - r.leak;
     for v in m {
-        for i in hexgrid::pos_iter_to_cells(v, &b) {
+        for i in hexgrid::pos_iter_to_cells(v, &b.clone()) {
             match i {
                 Some((pos, cell)) => {
                     let (r1, b1) = do_tick(pos, cell, r, b);

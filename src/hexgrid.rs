@@ -10,20 +10,17 @@ pub struct Pos {
     pub y: usize,
 }
 
-pub fn pos_iter_to_cells(
-    pos: impl IntoIterator<Item = Pos>,
-    m: &Board,
-) -> Vec<Option<(Pos, celldata::CellState)>> {
-    let ret = pos
-        .into_iter()
-        .map(|p @ Pos { x, y }| match m.get(x) {
-            Some(v) => match v.get(y) {
-                None => None,
-                Some(&a) => Some((p, a)),
-            },
+pub fn pos_iter_to_cells<'a>(
+    pos: impl IntoIterator<Item = Pos> + 'a,
+    m: &'a Board,
+) -> impl Iterator<Item = Option<(Pos, celldata::CellState)>> + 'a {
+    let ret = pos.into_iter().map(|p @ Pos { x, y }| match m.get(x) {
+        Some(v) => match v.get(y) {
             None => None,
-        })
-        .collect();
+            Some(&a) => Some((p, a)),
+        },
+        None => None,
+    });
     return ret;
 }
 
@@ -34,8 +31,7 @@ pub fn get_connected(
 ) -> impl IntoIterator<Item = (Pos, celldata::CellState)> {
     let mut set_size = 0;
     let mut connected: HashSet<(Pos, celldata::CellState)> = neighbors(p, m)
-        .iter()
-        .filter_map(|&i| match i {
+        .filter_map(|i| match i {
             Some((_x, a)) => {
                 if t(a) {
                     i
@@ -61,7 +57,10 @@ pub fn get_connected(
     return connected;
 }
 
-pub fn neighbors(Pos { x: x0, y: y0 }: Pos, m: &Board) -> Vec<Option<(Pos, celldata::CellState)>> {
+pub fn neighbors<'a>(
+    Pos { x: x0, y: y0 }: Pos,
+    m: &'a Board,
+) -> impl Iterator<Item = Option<(Pos, celldata::CellState)>> + 'a {
     let x = x0 as i64;
     let y = y0 as i64;
     let hard_neighbors = if (x % 2) == 0 {

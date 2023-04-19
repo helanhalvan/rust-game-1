@@ -1,0 +1,30 @@
+{
+   "width": 1000,
+   "height": 1000,
+   "start": {
+      "by_name": "main"
+   },
+   "objects": {
+      "full": {
+         "type": "circle",
+         "color": "fill",
+         "tags": [],
+         "radius": 200
+      },
+      "empty": {
+         "type": "ring",
+         "color": "fill",
+         "tags": [],
+         "radius": 200
+      },
+      "main": {
+         "type": "sun",
+         "query": {
+            "by_name": "full"
+         },
+         "scale": 40,
+         "radius": 200,
+         "segments": 5
+      }
+   }
+}

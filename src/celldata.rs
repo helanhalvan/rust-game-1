@@ -114,10 +114,9 @@ pub fn leak_delta(cv: CellStateVariant, p: hexgrid::Pos, m: &hexgrid::Board) -> 
         _ => None,
     } {
         let n_effects_applied: i32 = hexgrid::neighbors(p, &m)
-            .iter()
             .map(|i| match i {
                 Some((_, cc)) => {
-                    let ct: CellStateVariant = (*cc).into();
+                    let ct: CellStateVariant = (cc).into();
                     if let Some(d) = n_effects.get(&ct) {
                         *d
                     } else {

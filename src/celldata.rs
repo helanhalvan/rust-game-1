@@ -1,23 +1,73 @@
 use core::fmt;
-use std::collections::HashMap;
+use std::{collections::HashMap, env::var};
 
 use crate::{actionmachine, hexgrid};
 
 //Data in a cell (position) on the board
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CellState {
-    Hidden,
-    Unused,
-    Hot {
+    Unit {
+        variant: CellStateVariant,
+    },
+    Slot {
+        variant: CellStateVariant,
         slot: Slot,
     },
-    Insulation,
-    Feeder,
     InProgress {
         variant: CellStateVariant,
         countdown: actionmachine::InProgressWait,
     },
-    Seller,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Slot {
+    Empty,
+    Done,
+}
+
+//all possible cellstates, grouped by CellStateVariant
+pub type Statespace = Vec<(CellStateVariant, Vec<CellState>)>;
+
+//I'll need a build-statespace for the things with buttons later
+// all possible non-interactive cellstates, used by the UI
+pub fn non_interactive_statespace() -> Statespace {
+    let mut ret = vec![
+        //(CellStateVariant::Hidden, vec![CellState::Hidden]),
+        //(CellStateVariant::Unused, vec![CellState::Unused]),
+        (
+            CellStateVariant::Insulation,
+            vec![CellState::Unit {
+                variant: CellStateVariant::Insulation,
+            }],
+        ),
+        (
+            CellStateVariant::Feeder,
+            vec![CellState::Unit {
+                variant: CellStateVariant::Feeder,
+            }],
+        ),
+        (
+            CellStateVariant::Seller,
+            vec![CellState::Unit {
+                variant: CellStateVariant::Seller,
+            }],
+        ),
+        (
+            CellStateVariant::Hot,
+            vec![
+                CellState::Slot {
+                    variant: CellStateVariant::Hot,
+                    slot: Slot::Empty,
+                },
+                CellState::Slot {
+                    variant: CellStateVariant::Hot,
+                    slot: Slot::Done,
+                },
+            ],
+        ),
+    ];
+    ret.append(&mut actionmachine::in_progress_statespace());
+    ret
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -35,13 +85,9 @@ pub enum CellStateVariant {
 impl Into<CellStateVariant> for CellState {
     fn into(self) -> CellStateVariant {
         match self {
-            CellState::Hidden => CellStateVariant::Hidden,
-            CellState::Unused => CellStateVariant::Unused,
-            CellState::Hot { .. } => CellStateVariant::Hot,
-            CellState::Insulation => CellStateVariant::Insulation,
-            CellState::Feeder => CellStateVariant::Feeder,
-            CellState::Seller => CellStateVariant::Seller,
-            CellState::InProgress { .. } => CellStateVariant::InProgress,
+            CellState::Unit { variant } => variant,
+            CellState::Slot { variant, .. } => variant,
+            CellState::InProgress { variant, .. } => variant,
         }
     }
 }
@@ -52,32 +98,26 @@ impl fmt::Display for CellStateVariant {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Slot {
-    Empty,
-    Done,
-}
-
 pub fn is_hot(c: CellState) -> bool {
-    match c {
-        CellState::Hot { .. } => true,
-        CellState::InProgress { variant, .. } if variant == CellStateVariant::Hot => true,
-        _ => false,
-    }
+    let cv: CellStateVariant = c.into();
+    cv == CellStateVariant::Hot
 }
 
 // Cell content initalizer/constructor
 pub fn build(cv: CellStateVariant) -> CellState {
     match cv {
-        CellStateVariant::Unused => CellState::Unused,
-        CellStateVariant::Hot => CellState::Hot { slot: Slot::Empty },
-        CellStateVariant::Insulation => CellState::Insulation,
-        CellStateVariant::Feeder => CellState::Feeder,
-        CellStateVariant::ActionMachine => CellState::InProgress {
-            variant: cv,
+        a @ (CellStateVariant::Insulation
+        | CellStateVariant::Feeder
+        | CellStateVariant::Unused
+        | CellStateVariant::Seller) => CellState::Unit { variant: a },
+        a @ CellStateVariant::Hot => CellState::Slot {
+            variant: a,
+            slot: Slot::Empty,
+        },
+        a @ CellStateVariant::ActionMachine => CellState::InProgress {
+            variant: a,
             countdown: 3,
         },
-        CellStateVariant::Seller => CellState::Seller,
         _ => {
             println!("unexpected {:?}", cv);
             unimplemented!()

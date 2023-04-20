@@ -34,7 +34,9 @@ pub fn to_gui<'a>(
     let content = match has_image(s, imgs) {
         Some(img) => crate::Element::from(image::viewer(img.clone())),
         None => match s {
-            celldata::CellState::Unused => {
+            celldata::CellState::Unit {
+                variant: celldata::CellStateVariant::Unused,
+            } => {
                 if actions > 0 {
                     let pos = hexgrid::Pos { x, y };
                     let grid = to_rectangle(celldata::buildable(), 3, 4)
@@ -60,7 +62,9 @@ pub fn to_gui<'a>(
                     to_text("Unused".to_string())
                 }
             }
-            celldata::CellState::Hidden => {
+            celldata::CellState::Unit {
+                variant: celldata::CellStateVariant::Hidden,
+            } => {
                 if actions > 0 {
                     let button_text = "Explore".to_string();
                     let button_content = to_text(button_text);
@@ -73,9 +77,11 @@ pub fn to_gui<'a>(
                     to_text("Hidden".to_string())
                 }
             }
+            /*
             celldata::CellState::Hot { slot: state, .. } => {
                 to_text(format!("Hot {:?}", state).to_string())
             }
+            */
             a => {
                 let v: celldata::CellStateVariant = a.into();
                 to_text(v.to_string())

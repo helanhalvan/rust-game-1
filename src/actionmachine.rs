@@ -33,6 +33,13 @@ pub fn maybe_insert(
 
 pub type InProgressWait = u32;
 
+pub fn in_progress_variants() -> [celldata::CellStateVariant; 2] {
+    [
+        celldata::CellStateVariant::ActionMachine,
+        celldata::CellStateVariant::Hot,
+    ]
+}
+
 pub fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
     match cv {
         celldata::CellStateVariant::ActionMachine => 3,
@@ -42,6 +49,21 @@ pub fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
             unimplemented!()
         }
     }
+}
+
+pub fn in_progress_statespace() -> celldata::Statespace {
+    let mut ret = vec![];
+    for cv in in_progress_variants() {
+        let mut cv_buff = vec![];
+        for j in 1..in_progress_max(cv) {
+            cv_buff.push(celldata::CellState::InProgress {
+                variant: cv,
+                countdown: j,
+            })
+        }
+        ret.push((cv, cv_buff));
+    }
+    ret
 }
 
 fn do_progress_done(
@@ -58,7 +80,8 @@ fn do_progress_done(
                 countdown: in_progress_max(cv),
             }
         }
-        celldata::CellStateVariant::Hot => celldata::CellState::Hot {
+        celldata::CellStateVariant::Hot => celldata::CellState::Slot {
+            variant: cv,
             slot: celldata::Slot::Done,
         },
         a => {
@@ -94,12 +117,15 @@ fn do_tick(
             };
             hexgrid::set(p, new_cell, &mut b);
         }
-        celldata::CellState::Feeder => {
+        celldata::CellState::Unit {
+            variant: celldata::CellStateVariant::Feeder,
+        } => {
             let con: Vec<(hexgrid::Pos, celldata::CellState)> =
                 hexgrid::get_connected(p, celldata::is_hot, &b)
                     .into_iter()
                     .filter(|(_p, i)| match i {
-                        celldata::CellState::Hot {
+                        celldata::CellState::Slot {
+                            variant: celldata::CellStateVariant::Hot,
                             slot: celldata::Slot::Empty,
                             ..
                         } => true,
@@ -109,8 +135,10 @@ fn do_tick(
             match con.get(0) {
                 Some((
                     hp,
-                    celldata::CellState::Hot {
+                    celldata::CellState::Slot {
+                        variant: celldata::CellStateVariant::Hot,
                         slot: celldata::Slot::Empty,
+                        ..
                     },
                 )) => {
                     let new_cell = celldata::CellState::InProgress {
@@ -122,12 +150,15 @@ fn do_tick(
                 _ => {}
             }
         }
-        celldata::CellState::Seller => {
+        celldata::CellState::Unit {
+            variant: celldata::CellStateVariant::Seller,
+        } => {
             let con: Vec<(hexgrid::Pos, celldata::CellState)> =
                 hexgrid::get_connected(p, celldata::is_hot, &b)
                     .into_iter()
                     .filter(|(_p, i)| match i {
-                        celldata::CellState::Hot {
+                        celldata::CellState::Slot {
+                            variant: celldata::CellStateVariant::Hot,
                             slot: celldata::Slot::Done,
                             ..
                         } => true,
@@ -137,11 +168,13 @@ fn do_tick(
             match con.get(0) {
                 Some((
                     hp,
-                    celldata::CellState::Hot {
+                    celldata::CellState::Slot {
+                        variant: celldata::CellStateVariant::Hot,
                         slot: celldata::Slot::Done,
                     },
                 )) => {
-                    let new_cell = celldata::CellState::Hot {
+                    let new_cell = celldata::CellState::Slot {
+                        variant: celldata::CellStateVariant::Hot,
                         slot: celldata::Slot::Empty,
                     };
                     hexgrid::set(*hp, new_cell, &mut b);
@@ -151,7 +184,10 @@ fn do_tick(
                 _ => {}
             }
         }
-        celldata::CellState::Hot { .. } => {}
+        celldata::CellState::Slot {
+            variant: celldata::CellStateVariant::Hot,
+            ..
+        } => {}
         a => {
             println!("unexpected {:?}{:?}{:?}", x, y, a);
             unimplemented!()

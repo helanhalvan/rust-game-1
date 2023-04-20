@@ -64,7 +64,15 @@ impl Application for GameState {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
-        let m1 = vec![vec![celldata::CellState::Hidden; 5]; 10];
+        let m1 = vec![
+            vec![
+                celldata::CellState::Unit {
+                    variant: celldata::CellStateVariant::Hidden
+                };
+                5
+            ];
+            10
+        ];
         (
             GameState {
                 matrix: m1,

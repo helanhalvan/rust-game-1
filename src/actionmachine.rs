@@ -79,7 +79,7 @@ fn do_tick(
     match c {
         celldata::CellState::InProgress {
             variant,
-            countdown: 0,
+            countdown: 1,
         } => {
             let (r1, b1) = do_progress_done(p, variant, r, b);
             r = r1;

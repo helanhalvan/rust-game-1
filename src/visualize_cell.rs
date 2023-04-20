@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     celldata::{self, Slot},
-    css, hexgrid, widget, Message,
+    css, hexgrid, make_imgs, widget, Message,
 };
 use iced::{
     alignment::{Horizontal, Vertical},
@@ -13,10 +13,10 @@ use widget::Element;
 pub type ImgBuffer = HashMap<celldata::CellState, image::Handle>;
 
 pub fn new_img_buffer() -> ImgBuffer {
-    let ret = HashMap::from([(
-        celldata::CellState::Hot { slot: Slot::Empty },
-        image::Handle::from_path("./img/test.png"), // THIS DOES NOT PANIC IF THERE IS NOTHING TO FIND, AND IT SHOULD!
-    )]);
+    let ret = make_imgs::all_imgs()
+        .iter()
+        .map(|(i, j)| (*i, image::Handle::from_path(j)))
+        .collect();
     return ret;
 }
 

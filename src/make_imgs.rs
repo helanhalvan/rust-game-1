@@ -1,18 +1,36 @@
+use std::fs;
+
 use image_generator::{objects::Object, structure::Structure};
 
-use crate::{actionmachine, celldata};
+use crate::{
+    actionmachine,
+    celldata::{self, CellStateVariant},
+};
+
+pub fn all_imgs() -> Vec<(celldata::CellState, String)> {
+    let mut all_imgs_buff = Vec::new();
+    for i in image_variants() {
+        let max_size = actionmachine::in_progress_max(i);
+        for j in 1..max_size + 2 {
+            all_imgs_buff.push((
+                celldata::CellState::InProgress {
+                    variant: i,
+                    countdown: j,
+                },
+                make_path(i, j),
+            ))
+        }
+    }
+    return all_imgs_buff;
+}
 
 pub fn make_imgs() {
-    let image_variants = [
-        celldata::CellStateVariant::ActionMachine,
-        celldata::CellStateVariant::Hot,
-    ];
     let base = Structure::load_from_file("./img_gen/base.json").unwrap();
-    for i in image_variants {
+    for i in image_variants() {
         let series = base.clone();
         let theme = image_generator::structure::ImageContext::new(&series);
         let max_size = actionmachine::in_progress_max(i);
-        for j in 1..max_size + 1 {
+        for j in 1..max_size + 2 {
             let mut img_base = theme.clone();
             let mut newobj = img_base.objects.clone();
             match img_base.objects.get("main") {
@@ -30,6 +48,15 @@ pub fn make_imgs() {
     }
 }
 
+fn image_variants() -> [CellStateVariant; 2] {
+    [
+        celldata::CellStateVariant::ActionMachine,
+        celldata::CellStateVariant::Hot,
+    ]
+}
+
 fn make_path(cv: celldata::CellStateVariant, i: u32) -> String {
-    "./img/".to_string() + &cv.to_string() + &i.to_string() + &".png"
+    let dir = "./img/".to_string() + &cv.to_string();
+    let _ = fs::create_dir_all(dir.clone());
+    dir + "/" + &i.to_string() + &".png"
 }

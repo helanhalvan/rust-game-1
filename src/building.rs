@@ -1,7 +1,8 @@
 use crate::{
     actionmachine,
     celldata::{self, CellState, CellStateVariant},
-    hexgrid, GameState,
+    hexgrid::{self, Pos},
+    GameState,
 };
 
 // mirror of the main board (hexgrid::Board) in size
@@ -12,16 +13,20 @@ pub type Board = hexgrid::Hexgrid<LogisticsState>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LogisticsState {
     None,
-    Source { used: i32, total: i32 },
-    Available { localtions: Vec<hexgrid::Pos> },
+    Source { used: i32, total: i32 }, // TODO, remove source and use celldata values instead
+    Available { locations: Vec<hexgrid::Pos> },
 }
 
 pub fn new_plane(xmax: usize, ymax: usize) -> Board {
     vec![vec![LogisticsState::None; xmax]; ymax]
 }
 
-pub fn has_actions(_pos: hexgrid::Pos, g: &GameState) -> bool {
-    g.resources.build_points > g.resources.build_in_progress
+pub fn has_actions(pos: hexgrid::Pos, g: &GameState) -> bool {
+    match hexgrid::get(pos, &g.logistics_plane) {
+        LogisticsState::None => false,
+        LogisticsState::Source { used, total } => total > used,
+        LogisticsState::Available { locations } => locations.into_iter().any(|i| has_actions(i, g)),
+    }
 }
 
 pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameState {
@@ -33,11 +38,83 @@ pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameS
         },
     };
     hexgrid::set(pos, new_cell, &mut g.matrix);
-
+    g = use_builder(pos, g);
     g.resources.build_in_progress = g.resources.build_in_progress + 1;
     g.action_machine =
         actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
     g
+}
+
+fn use_builder(pos: hexgrid::Pos, mut g: GameState) -> GameState {
+    g.logistics_plane = find_logistcs_node(
+        pos,
+        |i| match i {
+            LogisticsState::Source { used, total } => total > used,
+            _ => false,
+        },
+        |i| match i {
+            LogisticsState::Source { used, total } => LogisticsState::Source {
+                used: used + 1,
+                total: total,
+            },
+            _ => unimplemented!(),
+        },
+        g.logistics_plane,
+    )
+    .unwrap();
+    g
+}
+
+fn return_builder(pos: hexgrid::Pos, mut g: GameState) -> GameState {
+    g.logistics_plane = find_logistcs_node(
+        pos,
+        |i| match i {
+            LogisticsState::Source { used, total } => (used > 0) && (used <= total),
+            _ => false,
+        },
+        |i| match i {
+            LogisticsState::Source { used, total } => LogisticsState::Source {
+                used: used - 1,
+                total: total,
+            },
+            _ => unimplemented!(),
+        },
+        g.logistics_plane,
+    )
+    .unwrap();
+    g
+}
+
+fn find_logistcs_node(
+    pos: Pos,
+    cond: fn(LogisticsState) -> bool,
+    update: fn(LogisticsState) -> LogisticsState,
+    mut board: Board,
+) -> Option<Board> {
+    let c = hexgrid::get(pos, &board);
+    if cond(c.clone()) {
+        let c1 = update(c);
+        hexgrid::set(pos, c1, &mut board);
+        Some(board)
+    } else {
+        match c {
+            LogisticsState::Available { locations } => {
+                for i in locations {
+                    match find_logistcs_node(i, cond, update, board.clone()) {
+                        a @ Some(..) => {
+                            return a;
+                        }
+                        None => {}
+                    }
+                }
+                None
+            }
+            _ => {
+                dbg!(c);
+                None
+            }
+        }
+    }
 }
 
 fn buildtime(cv: CellStateVariant) -> actionmachine::InProgressWait {
@@ -87,10 +164,18 @@ pub fn explore_able() -> Vec<CellStateVariant> {
 
 pub fn finalize_build(
     cv: CellStateVariant,
-    pos @ hexgrid::Pos { x, y }: hexgrid::Pos,
+    pos: hexgrid::Pos,
     mut g: GameState,
 ) -> (CellState, GameState) {
-    g.resources.build_in_progress = g.resources.build_in_progress - 1;
+    g = return_builder(pos, g);
+    do_build(cv, pos, g)
+}
+
+pub fn do_build(
+    cv: CellStateVariant,
+    pos: hexgrid::Pos,
+    mut g: GameState,
+) -> (CellState, GameState) {
     g.action_machine = actionmachine::remove(g.action_machine, pos, CellStateVariant::Building);
     g.action_machine = actionmachine::maybe_insert(g.action_machine, pos, cv);
     let c = match cv {
@@ -117,8 +202,9 @@ pub fn finalize_build(
         a @ CellStateVariant::Hub => {
             let builders = 3;
             g.resources.build_points = g.resources.build_points + builders;
-            g.logistics_plane[x][y] = LogisticsState::Source { used: 0, total: 3 };
-
+            let new_cell = LogisticsState::Source { used: 0, total: 3 };
+            hexgrid::set(pos, new_cell, &mut g.logistics_plane);
+            g.logistics_plane = add_to_neighbors(pos, g.logistics_plane);
             CellState {
                 variant: a,
                 data: celldata::CellStateData::Resource { slot: builders },
@@ -137,4 +223,26 @@ pub fn finalize_build(
         g.resources.tiles = g.resources.tiles + 1;
     }
     (c, g)
+}
+
+fn add_to_neighbors(pos: hexgrid::Pos, mut b: Board) -> Board {
+    b = hexgrid::neighbors(pos, &(b.clone()))
+        .filter_map(|i| i)
+        .fold(b, |mut acc, (pn, c)| match c {
+            LogisticsState::None => {
+                let new_cell = LogisticsState::Available {
+                    locations: vec![pos],
+                };
+                hexgrid::set(pn, new_cell, &mut acc);
+                acc
+            }
+            LogisticsState::Source { .. } => acc,
+            LogisticsState::Available { mut locations } => {
+                locations.push(pos);
+                let new_cell = LogisticsState::Available { locations };
+                hexgrid::set(pn, new_cell, &mut acc);
+                acc
+            }
+        });
+    b
 }

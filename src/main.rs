@@ -96,7 +96,7 @@ impl Application for GameState {
         };
         let p = hexgrid::Pos { x: 4, y: 2 };
         let cv = celldata::CellStateVariant::Hub;
-        let (c, mut g1) = building::finalize_build(cv, p, g);
+        let (c, mut g1) = building::do_build(cv, p, g);
         hexgrid::set(p, c, &mut g1.matrix);
         (g1, Command::none())
     }

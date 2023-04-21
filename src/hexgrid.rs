@@ -11,28 +11,28 @@ pub struct Pos {
     pub y: usize,
 }
 
-pub fn pos_iter_to_cells<'a, T: Copy>(
+pub fn pos_iter_to_cells<'a, T: Clone>(
     pos: impl IntoIterator<Item = Pos> + 'a,
     m: &'a Hexgrid<T>,
 ) -> impl Iterator<Item = Option<(Pos, T)>> + 'a {
     let ret = pos.into_iter().map(|p @ Pos { x, y }| match m.get(x) {
         Some(v) => match v.get(y) {
             None => None,
-            Some(&a) => Some((p, a)),
+            Some(a) => Some((p, a.clone())),
         },
         None => None,
     });
     return ret;
 }
 
-pub fn get_connected<T: Copy + std::cmp::Eq + std::hash::Hash>(
+pub fn get_connected<T: Clone + std::cmp::Eq + std::hash::Hash>(
     p: Pos,
     t: fn(T) -> bool,
     m: &Hexgrid<T>,
 ) -> impl IntoIterator<Item = (Pos, T)> {
     let mut set_size = 0;
     let mut connected: HashSet<(Pos, _)> = neighbors(p, m)
-        .filter_map(|i| match i {
+        .filter_map(|i| match i.clone() {
             Some((_x, a)) => {
                 if t(a) {
                     i
@@ -48,8 +48,8 @@ pub fn get_connected<T: Copy + std::cmp::Eq + std::hash::Hash>(
         let new_connected = connected
             .iter()
             .flat_map(|(p, _)| neighbors(*p, m))
-            .filter_map(|i| match i {
-                Some((_x, a)) if t(a) => i,
+            .filter_map(|i| match i.clone() {
+                Some((_x, a)) if t(a.clone()) => i,
                 _ => None,
             })
             .collect();
@@ -58,7 +58,7 @@ pub fn get_connected<T: Copy + std::cmp::Eq + std::hash::Hash>(
     return connected;
 }
 
-pub fn neighbors<'a, T: Copy>(
+pub fn neighbors<'a, T: Clone>(
     Pos { x: x0, y: y0 }: Pos,
     m: &'a Hexgrid<T>,
 ) -> impl Iterator<Item = Option<(Pos, T)>> + 'a {
@@ -88,6 +88,6 @@ pub fn set<T>(Pos { x, y }: Pos, new_cell: T, m: &mut Hexgrid<T>) {
     m[x][y] = new_cell;
 }
 
-pub fn get<T: Copy>(Pos { x, y }: Pos, m: &Hexgrid<T>) -> T {
-    m[x][y]
+pub fn get<T: Clone>(Pos { x, y }: Pos, m: &Hexgrid<T>) -> T {
+    m[x][y].clone()
 }

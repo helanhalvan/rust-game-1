@@ -83,6 +83,7 @@ pub enum CellStateVariant {
     Seller,
     InProgress,
     Building,
+    Last,
 }
 
 impl Into<CellStateVariant> for CellState {
@@ -103,10 +104,10 @@ impl fmt::Display for CellStateVariant {
 
 pub fn is_hot(c: CellState) -> bool {
     let cv: CellStateVariant = c.into();
-    cv == CellStateVariant::Hot
+    is_hot_v(cv)
 }
 
-pub fn is_tile(cv: CellStateVariant) -> bool {
+pub fn is_hot_v(cv: CellStateVariant) -> bool {
     match cv {
         CellStateVariant::Hot => true,
         _ => false,

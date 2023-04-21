@@ -86,3 +86,7 @@ pub fn neighbors<'a>(
 pub fn set(Pos { x, y }: Pos, new_cell: celldata::CellState, m: &mut Board) {
     m[x][y] = new_cell;
 }
+
+pub fn get(Pos { x, y }: Pos, m: &Board) -> celldata::CellState {
+    m[x][y]
+}

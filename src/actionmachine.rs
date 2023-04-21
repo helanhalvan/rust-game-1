@@ -1,20 +1,27 @@
 use std::collections::HashSet;
 
-use crate::{building, celldata, hexgrid, GameState};
+use crate::{
+    building,
+    celldata::{self, CellStateVariant},
+    hexgrid, GameState,
+};
 
 //crontab but for game triggers
 pub type ActionMachine = Vec<HashSet<hexgrid::Pos>>;
 
 pub type Prio = usize;
-pub static ACTION_MAX_PRIO: Prio = 5;
+pub static ACTION_MAX_PRIO: Prio = (*(&CellStateVariant::Last)) as Prio;
 
+// for now the main point of prio is to ensure
+// all CellStateVariants which are the same are executed after eachother
+// to limit effects of order added on order executed
 pub fn prio(cv: celldata::CellStateVariant) -> Option<Prio> {
     match cv {
-        celldata::CellStateVariant::ActionMachine => Some(0),
-        celldata::CellStateVariant::Seller => Some(1),
-        celldata::CellStateVariant::Hot => Some(2),
-        celldata::CellStateVariant::Feeder => Some(3),
-        celldata::CellStateVariant::Building => Some(4),
+        CellStateVariant::ActionMachine
+        | CellStateVariant::Hot
+        | CellStateVariant::Feeder
+        | CellStateVariant::Seller
+        | CellStateVariant::Building => Some(*(&cv) as usize),
         _ => None,
     }
 }
@@ -63,7 +70,7 @@ pub fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
     match cv {
         celldata::CellStateVariant::ActionMachine => 3,
         celldata::CellStateVariant::Hot => 5,
-        celldata::CellStateVariant::Building => 2,
+        celldata::CellStateVariant::Building => 4,
         a => {
             println!("unexpected {:?}", a);
             unimplemented!()
@@ -95,7 +102,7 @@ fn do_progress_done(
 ) -> GameState {
     let new_cell = match (cv, on_done_data) {
         (celldata::CellStateVariant::ActionMachine, _) => {
-            g.resources.actions = g.resources.actions + 1;
+            g.resources.build_points = g.resources.build_points + 1;
             celldata::CellState::InProgress {
                 variant: cv,
                 countdown: in_progress_max(cv),
@@ -160,7 +167,6 @@ fn do_tick(
                         _ => false,
                     })
                     .collect();
-            //Feeder feeds twice?
             match con.get(0) {
                 Some((
                     hp,
@@ -208,7 +214,7 @@ fn do_tick(
                         slot: celldata::Slot::Empty,
                     };
                     hexgrid::set(*hp, new_cell, &mut g.matrix);
-                    g.resources.actions = g.resources.actions + 1;
+                    g.resources.build_points = g.resources.build_points + 1;
                     g.resources.wood = g.resources.wood + 40;
                 }
                 _ => {}
@@ -220,7 +226,7 @@ fn do_tick(
         } => {}
         a => {
             println!("unexpected {:?}{:?}{:?}", x, y, a);
-            //unimplemented!()
+            unimplemented!()
         }
     };
     g
@@ -228,18 +234,12 @@ fn do_tick(
 
 pub fn run(mut g: GameState) -> GameState {
     g.resources.wood = g.resources.wood - g.resources.leak;
-    let old_board = &g.matrix.clone();
     let old_acton_machine = g.action_machine.clone();
     for v in old_acton_machine {
-        for i in hexgrid::pos_iter_to_cells(v, old_board) {
-            match i {
-                Some((pos, cell)) => g = do_tick(pos, cell, g),
-                None => {
-                    println!("unexpected NONE");
-                    unimplemented!()
-                }
-            }
-        }
+        g = v.into_iter().fold(g, |acc, pos| {
+            let cell = hexgrid::get(pos, &acc.matrix);
+            do_tick(pos, cell, acc)
+        })
     }
     g
 }

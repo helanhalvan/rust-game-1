@@ -4,19 +4,34 @@ use crate::{
     hexgrid, GameState,
 };
 
-// Cell content initalizer/constructor
+pub fn has_actions(g: &GameState) -> bool {
+    g.resources.build_points > g.resources.build_in_progress
+}
+
 pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameState {
     let new_cell = CellState::InProgress {
         variant: CellStateVariant::Building,
-        countdown: actionmachine::in_progress_max(CellStateVariant::Building),
+        countdown: buildtime(cv),
         on_done_data: actionmachine::OnDoneData::CellStateVariant(cv),
     };
     hexgrid::set(pos, new_cell, &mut g.matrix);
 
-    g.resources.actions = g.resources.actions - 1;
+    g.resources.build_in_progress = g.resources.build_in_progress + 1;
     g.action_machine =
         actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
     g
+}
+
+fn buildtime(cv: CellStateVariant) -> actionmachine::InProgressWait {
+    match cv {
+        CellStateVariant::Unused => 2,
+        CellStateVariant::Hot => 4,
+        CellStateVariant::Feeder => 1,
+        CellStateVariant::Seller => 1,
+        CellStateVariant::Insulation => 2,
+        CellStateVariant::ActionMachine => 3,
+        _ => 4,
+    }
 }
 
 pub fn statespace() -> celldata::Statespace {
@@ -58,6 +73,7 @@ pub fn finalize_build(
     pos: hexgrid::Pos,
     mut g: GameState,
 ) -> (CellState, GameState) {
+    g.resources.build_in_progress = g.resources.build_in_progress - 1;
     g.action_machine = actionmachine::remove(g.action_machine, pos, CellStateVariant::Building);
     g.action_machine = actionmachine::maybe_insert(g.action_machine, pos, cv);
     let c = match cv {
@@ -83,7 +99,7 @@ pub fn finalize_build(
         g.resources.leak = g.resources.leak + new_delta;
         g.resources.heat_efficency = g.resources.tiles as f64 / g.resources.leak as f64;
     }
-    if celldata::is_tile(cv) {
+    if celldata::is_hot_v(cv) {
         g.resources.tiles = g.resources.tiles + 1;
     }
     (c, g)

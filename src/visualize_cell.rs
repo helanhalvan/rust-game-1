@@ -28,7 +28,7 @@ fn has_image(s: celldata::CellState, buff: &ImgBuffer) -> Option<&image::Handle>
 pub fn to_gui<'a>(
     x: usize,
     y: usize,
-    actions: i32,
+    has_actions: bool,
     s: celldata::CellState,
     imgs: &ImgBuffer,
 ) -> Element<'a, Message> {
@@ -44,7 +44,7 @@ pub fn to_gui<'a>(
             celldata::CellState::Unit {
                 variant: celldata::CellStateVariant::Unused,
             } => {
-                if actions > 0 {
+                if has_actions {
                     let pos = hexgrid::Pos { x, y };
                     let grid = to_rectangle(building::buildable(), 3, 4)
                         .iter()
@@ -72,7 +72,7 @@ pub fn to_gui<'a>(
             celldata::CellState::Unit {
                 variant: celldata::CellStateVariant::Hidden,
             } => {
-                if actions > 0 {
+                if has_actions {
                     let button_text = "Explore".to_string();
                     let button_content = to_text(button_text);
                     let b1 = button(button_content).on_press(Message::Build(

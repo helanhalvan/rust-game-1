@@ -49,7 +49,8 @@ pub struct GameResources {
     tiles: i32,
     leak: i32,
     heat_efficency: f64,
-    actions: i32,
+    build_points: i32,
+    build_in_progress: i32,
     wood: i32,
 }
 
@@ -82,7 +83,8 @@ impl Application for GameState {
                     tiles: 0,
                     leak: 1,
                     heat_efficency: 0.0,
-                    actions: 10,
+                    build_points: 3,
+                    build_in_progress: 0,
                     wood: 400,
                 },
                 action_machine: actionmachine::new(),
@@ -125,7 +127,7 @@ impl Application for GameState {
                         visualize_cell::to_gui(
                             x_index,
                             y_index,
-                            self.resources.actions,
+                            building::has_actions(self),
                             i.clone(),
                             &self.img_buffer,
                         )

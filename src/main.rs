@@ -1,4 +1,5 @@
 pub mod actionmachine;
+pub mod building;
 pub mod celldata;
 pub mod css;
 pub mod hexgrid;
@@ -36,7 +37,8 @@ pub fn main() {
     }
 }
 
-struct GameState {
+#[derive(Debug, Clone)]
+pub struct GameState {
     matrix: hexgrid::Board,
     resources: GameResources,
     action_machine: actionmachine::ActionMachine,
@@ -96,28 +98,9 @@ impl Application for GameState {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::Build(t, pos @ hexgrid::Pos { x, y }) => {
-                self.resources.actions = self.resources.actions - 1;
-                self.matrix[x][y] = celldata::build(t);
-                self.action_machine =
-                    actionmachine::maybe_insert(self.action_machine.clone(), pos, t);
-                if let Some(new_delta) = celldata::leak_delta(t, pos, &self.matrix) {
-                    self.resources.leak = self.resources.leak + new_delta;
-                    self.resources.heat_efficency =
-                        self.resources.tiles as f64 / self.resources.leak as f64;
-                }
-                if celldata::is_tile(t) {
-                    self.resources.tiles = self.resources.tiles + 1;
-                }
-            }
+            Message::Build(t, pos) => *self = building::build(t, pos, self.clone()),
             Message::EndTurn => {
-                let (r1, m1) = actionmachine::run(
-                    self.resources,
-                    self.action_machine.clone(),
-                    self.matrix.clone(),
-                );
-                self.resources = r1;
-                self.matrix = m1;
+                *self = actionmachine::run(self.clone());
             }
         }
         Command::none()

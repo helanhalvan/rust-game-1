@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    celldata::{self, Slot},
+    building,
+    celldata::{self},
     css, hexgrid, make_imgs, widget, Message,
 };
 use iced::{
@@ -45,7 +46,7 @@ pub fn to_gui<'a>(
             } => {
                 if actions > 0 {
                     let pos = hexgrid::Pos { x, y };
-                    let grid = to_rectangle(celldata::buildable(), 3, 4)
+                    let grid = to_rectangle(building::buildable(), 3, 4)
                         .iter()
                         .map(|v| {
                             crate::Element::from(iced::widget::row(
@@ -83,10 +84,7 @@ pub fn to_gui<'a>(
                     to_text("Hidden".to_string())
                 }
             }
-            a => {
-                let v: celldata::CellStateVariant = a.into();
-                to_text(v.to_string())
-            }
+            a => to_text(format!("{:?}", a).to_string()),
         },
     };
     crate::Element::from(

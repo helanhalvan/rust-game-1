@@ -1,7 +1,7 @@
 use core::fmt;
-use std::{collections::HashMap, env::var};
+use std::collections::HashMap;
 
-use crate::{actionmachine, hexgrid};
+use crate::{actionmachine, building, hexgrid};
 
 //Data in a cell (position) on the board
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -16,6 +16,7 @@ pub enum CellState {
     InProgress {
         variant: CellStateVariant,
         countdown: actionmachine::InProgressWait,
+        on_done_data: actionmachine::OnDoneData,
     },
 }
 
@@ -66,7 +67,8 @@ pub fn non_interactive_statespace() -> Statespace {
             ],
         ),
     ];
-    ret.append(&mut actionmachine::in_progress_statespace());
+    ret.append(&mut actionmachine::statespace());
+    ret.append(&mut building::statespace());
     ret
 }
 
@@ -80,6 +82,7 @@ pub enum CellStateVariant {
     ActionMachine,
     Seller,
     InProgress,
+    Building,
 }
 
 impl Into<CellStateVariant> for CellState {
@@ -103,42 +106,11 @@ pub fn is_hot(c: CellState) -> bool {
     cv == CellStateVariant::Hot
 }
 
-// Cell content initalizer/constructor
-pub fn build(cv: CellStateVariant) -> CellState {
-    match cv {
-        a @ (CellStateVariant::Insulation
-        | CellStateVariant::Feeder
-        | CellStateVariant::Unused
-        | CellStateVariant::Seller) => CellState::Unit { variant: a },
-        a @ CellStateVariant::Hot => CellState::Slot {
-            variant: a,
-            slot: Slot::Empty,
-        },
-        a @ CellStateVariant::ActionMachine => CellState::InProgress {
-            variant: a,
-            countdown: 3,
-        },
-        _ => {
-            println!("unexpected {:?}", cv);
-            unimplemented!()
-        }
-    }
-}
-
 pub fn is_tile(cv: CellStateVariant) -> bool {
     match cv {
         CellStateVariant::Hot => true,
         _ => false,
     }
-}
-pub fn buildable() -> Vec<CellStateVariant> {
-    vec![
-        CellStateVariant::Hot,
-        CellStateVariant::Insulation,
-        CellStateVariant::Feeder,
-        CellStateVariant::ActionMachine,
-        CellStateVariant::Seller,
-    ]
 }
 
 pub fn leak_delta(cv: CellStateVariant, p: hexgrid::Pos, m: &hexgrid::Board) -> Option<i32> {

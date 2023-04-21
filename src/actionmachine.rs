@@ -1,23 +1,26 @@
-use crate::{celldata, hexgrid, GameResources};
+use std::collections::HashSet;
+
+use crate::{building, celldata, hexgrid, GameState};
 
 //crontab but for game triggers
-pub type ActionMachine = Vec<Vec<hexgrid::Pos>>;
+pub type ActionMachine = Vec<HashSet<hexgrid::Pos>>;
 
-type ActionMachinePrio = usize;
-pub static ACTION_MAX_PRIO: ActionMachinePrio = 4;
+pub type Prio = usize;
+pub static ACTION_MAX_PRIO: Prio = 5;
 
-pub fn prio(cv: celldata::CellStateVariant) -> Option<ActionMachinePrio> {
+pub fn prio(cv: celldata::CellStateVariant) -> Option<Prio> {
     match cv {
         celldata::CellStateVariant::ActionMachine => Some(0),
         celldata::CellStateVariant::Seller => Some(1),
         celldata::CellStateVariant::Hot => Some(2),
         celldata::CellStateVariant::Feeder => Some(3),
+        celldata::CellStateVariant::Building => Some(4),
         _ => None,
     }
 }
 
 pub fn new() -> ActionMachine {
-    return vec![Vec::new(); ACTION_MAX_PRIO];
+    return vec![HashSet::new(); ACTION_MAX_PRIO];
 }
 
 pub fn maybe_insert(
@@ -26,12 +29,28 @@ pub fn maybe_insert(
     cv: celldata::CellStateVariant,
 ) -> ActionMachine {
     if let Some(p) = prio(cv) {
-        m[p].push(pos);
+        m[p].insert(pos);
+    }
+    m
+}
+pub fn remove(
+    mut m: ActionMachine,
+    pos: hexgrid::Pos,
+    cv: celldata::CellStateVariant,
+) -> ActionMachine {
+    if let Some(p) = prio(cv) {
+        m[p].remove(&pos);
     }
     m
 }
 
 pub type InProgressWait = u32;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OnDoneData {
+    Nothing,
+    CellStateVariant(celldata::CellStateVariant),
+}
 
 pub fn in_progress_variants() -> [celldata::CellStateVariant; 2] {
     [
@@ -44,6 +63,7 @@ pub fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
     match cv {
         celldata::CellStateVariant::ActionMachine => 3,
         celldata::CellStateVariant::Hot => 5,
+        celldata::CellStateVariant::Building => 2,
         a => {
             println!("unexpected {:?}", a);
             unimplemented!()
@@ -51,7 +71,7 @@ pub fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
     }
 }
 
-pub fn in_progress_statespace() -> celldata::Statespace {
+pub fn statespace() -> celldata::Statespace {
     let mut ret = vec![];
     for cv in in_progress_variants() {
         let mut cv_buff = vec![];
@@ -59,7 +79,8 @@ pub fn in_progress_statespace() -> celldata::Statespace {
             cv_buff.push(celldata::CellState::InProgress {
                 variant: cv,
                 countdown: j,
-            })
+                on_done_data: OnDoneData::Nothing,
+            });
         }
         ret.push((cv, cv_buff));
     }
@@ -69,59 +90,66 @@ pub fn in_progress_statespace() -> celldata::Statespace {
 fn do_progress_done(
     p @ hexgrid::Pos { x, y }: hexgrid::Pos,
     cv: celldata::CellStateVariant,
-    mut r: GameResources,
-    mut b: hexgrid::Board,
-) -> (GameResources, hexgrid::Board) {
-    let new_cell = match cv {
-        celldata::CellStateVariant::ActionMachine => {
-            r.actions = r.actions + 1;
+    on_done_data: OnDoneData,
+    mut g: GameState,
+) -> GameState {
+    let new_cell = match (cv, on_done_data) {
+        (celldata::CellStateVariant::ActionMachine, _) => {
+            g.resources.actions = g.resources.actions + 1;
             celldata::CellState::InProgress {
                 variant: cv,
                 countdown: in_progress_max(cv),
+                on_done_data: OnDoneData::Nothing,
             }
         }
-        celldata::CellStateVariant::Hot => celldata::CellState::Slot {
+        (celldata::CellStateVariant::Hot, _) => celldata::CellState::Slot {
             variant: cv,
             slot: celldata::Slot::Done,
         },
+        (celldata::CellStateVariant::Building, OnDoneData::CellStateVariant(new_cv)) => {
+            let (new_c, new_g) = building::finalize_build(new_cv, p, g);
+            g = new_g;
+            new_c
+        }
         a => {
             println!("unexpected {:?}{:?}{:?}", x, y, a);
             unimplemented!()
         }
     };
-    hexgrid::set(p, new_cell, &mut b);
-    (r, b)
+    hexgrid::set(p, new_cell, &mut g.matrix);
+    g
 }
 
 fn do_tick(
     p @ hexgrid::Pos { x, y }: hexgrid::Pos,
     c: celldata::CellState,
-    mut r: GameResources,
-    mut b: hexgrid::Board,
-) -> (GameResources, hexgrid::Board) {
+    mut g: GameState,
+) -> GameState {
     match c {
         celldata::CellState::InProgress {
             variant,
             countdown: 1,
+            on_done_data,
         } => {
-            let (r1, b1) = do_progress_done(p, variant, r, b);
-            r = r1;
-            b = b1;
+            g = do_progress_done(p, variant, on_done_data, g);
         }
         celldata::CellState::InProgress {
-            variant, countdown, ..
+            variant,
+            countdown,
+            on_done_data,
         } => {
             let new_cell = celldata::CellState::InProgress {
                 countdown: countdown - 1,
                 variant,
+                on_done_data,
             };
-            hexgrid::set(p, new_cell, &mut b);
+            hexgrid::set(p, new_cell, &mut g.matrix);
         }
         celldata::CellState::Unit {
             variant: celldata::CellStateVariant::Feeder,
         } => {
             let con: Vec<(hexgrid::Pos, celldata::CellState)> =
-                hexgrid::get_connected(p, celldata::is_hot, &b)
+                hexgrid::get_connected(p, celldata::is_hot, &g.matrix)
                     .into_iter()
                     .filter(|(_p, i)| match i {
                         celldata::CellState::Slot {
@@ -132,6 +160,7 @@ fn do_tick(
                         _ => false,
                     })
                     .collect();
+            //Feeder feeds twice?
             match con.get(0) {
                 Some((
                     hp,
@@ -144,8 +173,9 @@ fn do_tick(
                     let new_cell = celldata::CellState::InProgress {
                         variant: celldata::CellStateVariant::Hot,
                         countdown: in_progress_max(celldata::CellStateVariant::Hot),
+                        on_done_data: OnDoneData::Nothing,
                     };
-                    hexgrid::set(*hp, new_cell, &mut b);
+                    hexgrid::set(*hp, new_cell, &mut g.matrix);
                 }
                 _ => {}
             }
@@ -154,7 +184,7 @@ fn do_tick(
             variant: celldata::CellStateVariant::Seller,
         } => {
             let con: Vec<(hexgrid::Pos, celldata::CellState)> =
-                hexgrid::get_connected(p, celldata::is_hot, &b)
+                hexgrid::get_connected(p, celldata::is_hot, &g.matrix)
                     .into_iter()
                     .filter(|(_p, i)| match i {
                         celldata::CellState::Slot {
@@ -177,9 +207,9 @@ fn do_tick(
                         variant: celldata::CellStateVariant::Hot,
                         slot: celldata::Slot::Empty,
                     };
-                    hexgrid::set(*hp, new_cell, &mut b);
-                    r.actions = r.actions + 1;
-                    r.wood = r.wood + 40;
+                    hexgrid::set(*hp, new_cell, &mut g.matrix);
+                    g.resources.actions = g.resources.actions + 1;
+                    g.resources.wood = g.resources.wood + 40;
                 }
                 _ => {}
             }
@@ -190,26 +220,20 @@ fn do_tick(
         } => {}
         a => {
             println!("unexpected {:?}{:?}{:?}", x, y, a);
-            unimplemented!()
+            //unimplemented!()
         }
-    }
-    (r, b)
+    };
+    g
 }
 
-pub fn run(
-    mut r: GameResources,
-    m: ActionMachine,
-    mut b: hexgrid::Board,
-) -> (GameResources, hexgrid::Board) {
-    r.wood = r.wood - r.leak;
-    for v in m {
-        for i in hexgrid::pos_iter_to_cells(v, &b.clone()) {
+pub fn run(mut g: GameState) -> GameState {
+    g.resources.wood = g.resources.wood - g.resources.leak;
+    let old_board = &g.matrix.clone();
+    let old_acton_machine = g.action_machine.clone();
+    for v in old_acton_machine {
+        for i in hexgrid::pos_iter_to_cells(v, old_board) {
             match i {
-                Some((pos, cell)) => {
-                    let (r1, b1) = do_tick(pos, cell, r, b);
-                    b = b1;
-                    r = r1;
-                }
+                Some((pos, cell)) => g = do_tick(pos, cell, g),
                 None => {
                     println!("unexpected NONE");
                     unimplemented!()
@@ -217,5 +241,5 @@ pub fn run(
             }
         }
     }
-    return (r, b);
+    g
 }

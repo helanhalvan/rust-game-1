@@ -1,16 +1,12 @@
 use std::fs;
 
-use iced::theme;
-use image_generator::{
-    objects::Object,
-    structure::{ImageContext, Structure},
-};
+use image_generator::{objects::Object, structure::Structure};
 
-use crate::celldata::{self, non_interactive_statespace, CellStateVariant};
+use crate::celldata::{self};
 
 pub fn all_imgs() -> Vec<(celldata::CellState, String)> {
     let mut all_imgs_buff = Vec::new();
-    for (_cv, variant_space) in non_interactive_statespace() {
+    for (_cv, variant_space) in celldata::non_interactive_statespace() {
         for c in variant_space {
             all_imgs_buff.push((c, make_path(c)))
         }
@@ -20,7 +16,7 @@ pub fn all_imgs() -> Vec<(celldata::CellState, String)> {
 
 pub fn make_imgs() {
     let base = Structure::load_from_file("./img_gen/base.json").unwrap();
-    for (_cv, variant_space) in non_interactive_statespace() {
+    for (_cv, variant_space) in celldata::non_interactive_statespace() {
         let series = base.clone();
         let theme = image_generator::structure::ImageContext::new(&series);
         for cellstate in variant_space {

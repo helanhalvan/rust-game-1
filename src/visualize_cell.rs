@@ -41,8 +41,9 @@ pub fn to_gui<'a>(
             ]))
         }
         None => match s {
-            celldata::CellState::Unit {
+            celldata::CellState {
                 variant: celldata::CellStateVariant::Unused,
+                ..
             } => {
                 if has_actions {
                     let pos = hexgrid::Pos { x, y };
@@ -69,8 +70,9 @@ pub fn to_gui<'a>(
                     to_text("Unused".to_string())
                 }
             }
-            celldata::CellState::Unit {
+            celldata::CellState {
                 variant: celldata::CellStateVariant::Hidden,
+                ..
             } => {
                 if has_actions {
                     let button_text = "Explore".to_string();
@@ -84,7 +86,10 @@ pub fn to_gui<'a>(
                     to_text("Hidden".to_string())
                 }
             }
-            a => to_text(format!("{:?}", a).to_string()),
+            a => {
+                dbg!(a);
+                to_text(format!("{:?}", a).to_string())
+            }
         },
     };
     crate::Element::from(

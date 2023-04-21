@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use crate::celldata;
 
-pub type Board = Vec<Vec<celldata::CellState>>;
+pub type Hexgrid<T> = Vec<Vec<T>>;
+pub type Board = Hexgrid<celldata::CellState>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Pos {
@@ -10,10 +11,10 @@ pub struct Pos {
     pub y: usize,
 }
 
-pub fn pos_iter_to_cells<'a>(
+pub fn pos_iter_to_cells<'a, T: Copy>(
     pos: impl IntoIterator<Item = Pos> + 'a,
-    m: &'a Board,
-) -> impl Iterator<Item = Option<(Pos, celldata::CellState)>> + 'a {
+    m: &'a Hexgrid<T>,
+) -> impl Iterator<Item = Option<(Pos, T)>> + 'a {
     let ret = pos.into_iter().map(|p @ Pos { x, y }| match m.get(x) {
         Some(v) => match v.get(y) {
             None => None,
@@ -24,13 +25,13 @@ pub fn pos_iter_to_cells<'a>(
     return ret;
 }
 
-pub fn get_connected(
+pub fn get_connected<T: Copy + std::cmp::Eq + std::hash::Hash>(
     p: Pos,
-    t: fn(celldata::CellState) -> bool,
-    m: &Board,
-) -> impl IntoIterator<Item = (Pos, celldata::CellState)> {
+    t: fn(T) -> bool,
+    m: &Hexgrid<T>,
+) -> impl IntoIterator<Item = (Pos, T)> {
     let mut set_size = 0;
-    let mut connected: HashSet<(Pos, celldata::CellState)> = neighbors(p, m)
+    let mut connected: HashSet<(Pos, _)> = neighbors(p, m)
         .filter_map(|i| match i {
             Some((_x, a)) => {
                 if t(a) {
@@ -57,10 +58,10 @@ pub fn get_connected(
     return connected;
 }
 
-pub fn neighbors<'a>(
+pub fn neighbors<'a, T: Copy>(
     Pos { x: x0, y: y0 }: Pos,
-    m: &'a Board,
-) -> impl Iterator<Item = Option<(Pos, celldata::CellState)>> + 'a {
+    m: &'a Hexgrid<T>,
+) -> impl Iterator<Item = Option<(Pos, T)>> + 'a {
     let x = x0 as i64;
     let y = y0 as i64;
     let hard_neighbors = if (x % 2) == 0 {
@@ -83,10 +84,10 @@ pub fn neighbors<'a>(
     return ret;
 }
 
-pub fn set(Pos { x, y }: Pos, new_cell: celldata::CellState, m: &mut Board) {
+pub fn set<T>(Pos { x, y }: Pos, new_cell: T, m: &mut Hexgrid<T>) {
     m[x][y] = new_cell;
 }
 
-pub fn get(Pos { x, y }: Pos, m: &Board) -> celldata::CellState {
+pub fn get<T: Copy>(Pos { x, y }: Pos, m: &Hexgrid<T>) -> T {
     m[x][y]
 }

@@ -1,37 +1,57 @@
-use std::fs;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+};
 
 use image_generator::{objects::Object, structure::Structure};
 
-use crate::celldata::{self};
+use crate::{
+    actionmachine::OnDoneData,
+    celldata::{self},
+};
 
 pub fn all_imgs() -> Vec<(celldata::CellState, String)> {
     let mut all_imgs_buff = Vec::new();
-    for (_cv, variant_space) in celldata::non_interactive_statespace() {
-        for c in variant_space {
-            all_imgs_buff.push((c, make_path(c)))
-        }
+    for c in celldata::non_interactive_statespace() {
+        all_imgs_buff.push((c, make_path(c)))
     }
     return all_imgs_buff;
 }
 
 pub fn make_imgs() {
     let base = Structure::load_from_file("./img_gen/base.json").unwrap();
-    for (_cv, variant_space) in celldata::non_interactive_statespace() {
+    for (_cv, variant_space) in celldata::non_interactive_statespace().into_iter().fold(
+        HashMap::new(),
+        |mut acc: HashMap<celldata::CellStateVariant, Vec<_>>, i| {
+            let key = i.variant;
+            if let Some(v) = acc.get_mut(&key) {
+                v.push(i);
+                acc
+            } else {
+                let mut v = vec![];
+                v.push(i);
+                acc.insert(key, v);
+                acc
+            }
+        },
+    ) {
         let series = base.clone();
         let theme = image_generator::structure::ImageContext::new(&series);
         for cellstate in variant_space {
-            let path = make_path(cellstate);
-            let (obj_count, obj_name) = match cellstate {
-                celldata::CellState::InProgress { countdown, .. } => {
+            let path = make_path(cellstate.clone());
+            let (obj_count, obj_name) = match cellstate.data {
+                celldata::CellStateData::InProgress { countdown, .. } => {
                     (countdown, "inprogress".to_string())
                 }
-
-                celldata::CellState::Unit { .. } => (1, "inprogress".to_string()),
-                celldata::CellState::Slot {
+                celldata::CellStateData::Resource { slot, .. } => {
+                    (slot.try_into().unwrap(), "inprogress".to_string())
+                }
+                celldata::CellStateData::Unit { .. } => (1, "inprogress".to_string()),
+                celldata::CellStateData::Slot {
                     slot: celldata::Slot::Done,
                     ..
                 } => (1, "done".to_string()),
-                celldata::CellState::Slot {
+                celldata::CellStateData::Slot {
                     slot: celldata::Slot::Empty,
                     ..
                 } => (1, "empty".to_string()),
@@ -59,32 +79,34 @@ pub fn make_imgs() {
 }
 
 fn make_path(cellstate: celldata::CellState) -> String {
-    match cellstate {
-        celldata::CellState::InProgress {
-            variant: cv,
-            countdown,
-            ..
-        } => {
+    let cv = cellstate.variant;
+    match cellstate.data {
+        celldata::CellStateData::InProgress { countdown, .. } => {
             let dir = "./img/".to_string() + &cv.to_string();
             let _ = fs::create_dir_all(dir.clone());
             dir + "inprogress_" + &countdown.to_string() + &".png"
         }
-        celldata::CellState::Unit { variant: cv } => {
+        celldata::CellStateData::Resource { slot, .. } => {
+            let dir = "./img/".to_string() + &cv.to_string();
+            let _ = fs::create_dir_all(dir.clone());
+            dir + "inprogress_" + &slot.to_string() + &".png"
+        }
+        celldata::CellStateData::Unit { .. } => {
             let dir = "./img/".to_string() + &cv.to_string();
             let _ = fs::create_dir_all(dir.clone());
             dir + "unit" + &".png"
         }
-        celldata::CellState::Slot {
-            variant: cv,
+        celldata::CellStateData::Slot {
             slot: celldata::Slot::Empty,
+            ..
         } => {
             let dir = "./img/".to_string() + &cv.to_string();
             let _ = fs::create_dir_all(dir.clone());
             dir + "empty" + &".png"
         }
-        celldata::CellState::Slot {
-            variant: cv,
+        celldata::CellStateData::Slot {
             slot: celldata::Slot::Done,
+            ..
         } => {
             let dir = "./img/".to_string() + &cv.to_string();
             let _ = fs::create_dir_all(dir.clone());

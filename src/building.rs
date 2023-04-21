@@ -4,15 +4,33 @@ use crate::{
     hexgrid, GameState,
 };
 
-pub fn has_actions(g: &GameState) -> bool {
+// mirror of the main board (hexgrid::Board) in size
+// for use of the building subsytem
+// need to keep "available logistics" somewhere
+pub type Board = hexgrid::Hexgrid<LogisticsState>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum LogisticsState {
+    None,
+    Source { used: i32, total: i32 },
+    Available { localtions: Vec<hexgrid::Pos> },
+}
+
+pub fn new_plane(xmax: usize, ymax: usize) -> Board {
+    vec![vec![LogisticsState::None; xmax]; ymax]
+}
+
+pub fn has_actions(_pos: hexgrid::Pos, g: &GameState) -> bool {
     g.resources.build_points > g.resources.build_in_progress
 }
 
 pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameState {
-    let new_cell = CellState::InProgress {
+    let new_cell = celldata::CellState {
         variant: CellStateVariant::Building,
-        countdown: buildtime(cv),
-        on_done_data: actionmachine::OnDoneData::CellStateVariant(cv),
+        data: celldata::CellStateData::InProgress {
+            countdown: buildtime(cv),
+            on_done_data: actionmachine::OnDoneData::CellStateVariant(cv),
+        },
     };
     hexgrid::set(pos, new_cell, &mut g.matrix);
 
@@ -39,18 +57,17 @@ pub fn statespace() -> celldata::Statespace {
     let mut to_build = buildable();
     to_build.append(&mut explore_able());
     let mut ret = vec![];
-    let mut cv_buff = vec![];
     for j in 1..actionmachine::in_progress_max(cv) + 1 {
         for b in to_build.clone() {
-            cv_buff.push(celldata::CellState::InProgress {
+            ret.push(celldata::CellState {
                 variant: cv,
-                countdown: j,
-                on_done_data: actionmachine::OnDoneData::CellStateVariant(b),
+                data: celldata::CellStateData::InProgress {
+                    countdown: j,
+                    on_done_data: actionmachine::OnDoneData::CellStateVariant(b),
+                },
             })
         }
     }
-    ret.push((cv, cv_buff));
-
     ret
 }
 
@@ -70,7 +87,7 @@ pub fn explore_able() -> Vec<CellStateVariant> {
 
 pub fn finalize_build(
     cv: CellStateVariant,
-    pos: hexgrid::Pos,
+    pos @ hexgrid::Pos { x, y }: hexgrid::Pos,
     mut g: GameState,
 ) -> (CellState, GameState) {
     g.resources.build_in_progress = g.resources.build_in_progress - 1;
@@ -80,16 +97,33 @@ pub fn finalize_build(
         a @ (CellStateVariant::Insulation
         | CellStateVariant::Feeder
         | CellStateVariant::Unused
-        | CellStateVariant::Seller) => CellState::Unit { variant: a },
-        a @ CellStateVariant::Hot => CellState::Slot {
+        | CellStateVariant::Seller) => CellState {
             variant: a,
-            slot: celldata::Slot::Empty,
+            data: celldata::CellStateData::Unit,
         },
-        a @ CellStateVariant::ActionMachine => CellState::InProgress {
+        a @ CellStateVariant::Hot => CellState {
             variant: a,
-            countdown: 3,
-            on_done_data: actionmachine::OnDoneData::Nothing,
+            data: celldata::CellStateData::Slot {
+                slot: celldata::Slot::Empty,
+            },
         },
+        a @ CellStateVariant::ActionMachine => CellState {
+            variant: a,
+            data: celldata::CellStateData::InProgress {
+                countdown: 3,
+                on_done_data: actionmachine::OnDoneData::Nothing,
+            },
+        },
+        a @ CellStateVariant::Hub => {
+            let builders = 3;
+            g.resources.build_points = g.resources.build_points + builders;
+            g.logistics_plane[x][y] = LogisticsState::Source { used: 0, total: 3 };
+
+            CellState {
+                variant: a,
+                data: celldata::CellStateData::Resource { slot: builders },
+            }
+        }
         _ => {
             println!("unexpected {:?}", cv);
             unimplemented!()

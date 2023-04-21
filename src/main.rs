@@ -40,6 +40,7 @@ pub fn main() {
 #[derive(Debug, Clone)]
 pub struct GameState {
     matrix: hexgrid::Board,
+    logistics_plane: building::Board,
     resources: GameResources,
     action_machine: actionmachine::ActionMachine,
     img_buffer: visualize_cell::ImgBuffer,
@@ -67,31 +68,37 @@ impl Application for GameState {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
+        let xmax = 5;
+        let ymax = 10;
         let m1 = vec![
             vec![
-                celldata::CellState::Unit {
-                    variant: celldata::CellStateVariant::Hidden
+                celldata::CellState {
+                    variant: celldata::CellStateVariant::Hidden,
+                    data: celldata::CellStateData::Unit
                 };
-                5
+                xmax
             ];
-            10
+            ymax
         ];
-        (
-            GameState {
-                matrix: m1,
-                resources: GameResources {
-                    tiles: 0,
-                    leak: 1,
-                    heat_efficency: 0.0,
-                    build_points: 3,
-                    build_in_progress: 0,
-                    wood: 400,
-                },
-                action_machine: actionmachine::new(),
-                img_buffer: visualize_cell::new_img_buffer(),
+        let g = GameState {
+            matrix: m1,
+            logistics_plane: building::new_plane(xmax, ymax),
+            resources: GameResources {
+                tiles: 0,
+                leak: 1,
+                heat_efficency: 0.0,
+                build_points: 0,
+                build_in_progress: 1,
+                wood: 400,
             },
-            Command::none(),
-        )
+            action_machine: actionmachine::new(),
+            img_buffer: visualize_cell::new_img_buffer(),
+        };
+        let p = hexgrid::Pos { x: 4, y: 2 };
+        let cv = celldata::CellStateVariant::Hub;
+        let (c, mut g1) = building::finalize_build(cv, p, g);
+        hexgrid::set(p, c, &mut g1.matrix);
+        (g1, Command::none())
     }
 
     fn title(&self) -> String {
@@ -127,7 +134,13 @@ impl Application for GameState {
                         visualize_cell::to_gui(
                             x_index,
                             y_index,
-                            building::has_actions(self),
+                            building::has_actions(
+                                hexgrid::Pos {
+                                    x: x_index,
+                                    y: y_index,
+                                },
+                                self,
+                            ),
                             i.clone(),
                             &self.img_buffer,
                         )

@@ -81,15 +81,15 @@ pub fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
 pub fn statespace() -> celldata::Statespace {
     let mut ret = vec![];
     for cv in in_progress_variants() {
-        let mut cv_buff = vec![];
         for j in 1..in_progress_max(cv) + 1 {
-            cv_buff.push(celldata::CellState::InProgress {
+            ret.push(celldata::CellState {
                 variant: cv,
-                countdown: j,
-                on_done_data: OnDoneData::Nothing,
+                data: celldata::CellStateData::InProgress {
+                    countdown: j,
+                    on_done_data: OnDoneData::Nothing,
+                },
             });
         }
-        ret.push((cv, cv_buff));
     }
     ret
 }
@@ -103,15 +103,19 @@ fn do_progress_done(
     let new_cell = match (cv, on_done_data) {
         (celldata::CellStateVariant::ActionMachine, _) => {
             g.resources.build_points = g.resources.build_points + 1;
-            celldata::CellState::InProgress {
+            celldata::CellState {
                 variant: cv,
-                countdown: in_progress_max(cv),
-                on_done_data: OnDoneData::Nothing,
+                data: celldata::CellStateData::InProgress {
+                    countdown: in_progress_max(cv),
+                    on_done_data: OnDoneData::Nothing,
+                },
             }
         }
-        (celldata::CellStateVariant::Hot, _) => celldata::CellState::Slot {
+        (celldata::CellStateVariant::Hot, _) => celldata::CellState {
             variant: cv,
-            slot: celldata::Slot::Done,
+            data: celldata::CellStateData::Slot {
+                slot: celldata::Slot::Done,
+            },
         },
         (celldata::CellStateVariant::Building, OnDoneData::CellStateVariant(new_cv)) => {
             let (new_c, new_g) = building::finalize_build(new_cv, p, g);
@@ -133,35 +137,47 @@ fn do_tick(
     mut g: GameState,
 ) -> GameState {
     match c {
-        celldata::CellState::InProgress {
+        celldata::CellState {
             variant,
-            countdown: 1,
-            on_done_data,
+            data:
+                celldata::CellStateData::InProgress {
+                    countdown: 1,
+                    on_done_data,
+                },
         } => {
             g = do_progress_done(p, variant, on_done_data, g);
         }
-        celldata::CellState::InProgress {
+        celldata::CellState {
             variant,
-            countdown,
-            on_done_data,
+            data:
+                celldata::CellStateData::InProgress {
+                    countdown,
+                    on_done_data,
+                },
         } => {
-            let new_cell = celldata::CellState::InProgress {
-                countdown: countdown - 1,
+            let new_cell = celldata::CellState {
                 variant,
-                on_done_data,
+                data: celldata::CellStateData::InProgress {
+                    countdown: countdown - 1,
+                    on_done_data,
+                },
             };
             hexgrid::set(p, new_cell, &mut g.matrix);
         }
-        celldata::CellState::Unit {
+        celldata::CellState {
             variant: celldata::CellStateVariant::Feeder,
+            ..
         } => {
             let con: Vec<(hexgrid::Pos, celldata::CellState)> =
                 hexgrid::get_connected(p, celldata::is_hot, &g.matrix)
                     .into_iter()
                     .filter(|(_p, i)| match i {
-                        celldata::CellState::Slot {
+                        celldata::CellState {
                             variant: celldata::CellStateVariant::Hot,
-                            slot: celldata::Slot::Empty,
+                            data:
+                                celldata::CellStateData::Slot {
+                                    slot: celldata::Slot::Empty,
+                                },
                             ..
                         } => true,
                         _ => false,
@@ -170,32 +186,41 @@ fn do_tick(
             match con.get(0) {
                 Some((
                     hp,
-                    celldata::CellState::Slot {
+                    celldata::CellState {
                         variant: celldata::CellStateVariant::Hot,
-                        slot: celldata::Slot::Empty,
+                        data:
+                            celldata::CellStateData::Slot {
+                                slot: celldata::Slot::Empty,
+                            },
                         ..
                     },
                 )) => {
-                    let new_cell = celldata::CellState::InProgress {
+                    let new_cell = celldata::CellState {
                         variant: celldata::CellStateVariant::Hot,
-                        countdown: in_progress_max(celldata::CellStateVariant::Hot),
-                        on_done_data: OnDoneData::Nothing,
+                        data: celldata::CellStateData::InProgress {
+                            countdown: in_progress_max(celldata::CellStateVariant::Hot),
+                            on_done_data: OnDoneData::Nothing,
+                        },
                     };
                     hexgrid::set(*hp, new_cell, &mut g.matrix);
                 }
                 _ => {}
             }
         }
-        celldata::CellState::Unit {
+        celldata::CellState {
             variant: celldata::CellStateVariant::Seller,
+            ..
         } => {
             let con: Vec<(hexgrid::Pos, celldata::CellState)> =
                 hexgrid::get_connected(p, celldata::is_hot, &g.matrix)
                     .into_iter()
                     .filter(|(_p, i)| match i {
-                        celldata::CellState::Slot {
+                        celldata::CellState {
                             variant: celldata::CellStateVariant::Hot,
-                            slot: celldata::Slot::Done,
+                            data:
+                                celldata::CellStateData::Slot {
+                                    slot: celldata::Slot::Done,
+                                },
                             ..
                         } => true,
                         _ => false,
@@ -204,14 +229,19 @@ fn do_tick(
             match con.get(0) {
                 Some((
                     hp,
-                    celldata::CellState::Slot {
+                    celldata::CellState {
                         variant: celldata::CellStateVariant::Hot,
-                        slot: celldata::Slot::Done,
+                        data:
+                            celldata::CellStateData::Slot {
+                                slot: celldata::Slot::Done,
+                            },
                     },
                 )) => {
-                    let new_cell = celldata::CellState::Slot {
+                    let new_cell = celldata::CellState {
                         variant: celldata::CellStateVariant::Hot,
-                        slot: celldata::Slot::Empty,
+                        data: celldata::CellStateData::Slot {
+                            slot: celldata::Slot::Empty,
+                        },
                     };
                     hexgrid::set(*hp, new_cell, &mut g.matrix);
                     g.resources.build_points = g.resources.build_points + 1;
@@ -220,7 +250,7 @@ fn do_tick(
                 _ => {}
             }
         }
-        celldata::CellState::Slot {
+        celldata::CellState {
             variant: celldata::CellStateVariant::Hot,
             ..
         } => {}

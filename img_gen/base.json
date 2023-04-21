@@ -1,29 +1,41 @@
 {
-   "width": 1000,
-   "height": 1000,
+   "width": 100,
+   "height": 50,
    "start": {
       "by_name": "main"
    },
    "objects": {
-      "full": {
+      "inprogress": {
          "type": "circle",
          "color": "fill",
          "tags": [],
-         "radius": 200
+         "radius": 400
       },
       "empty": {
          "type": "ring",
          "color": "fill",
          "tags": [],
-         "radius": 200
+         "radius": 800
+      },
+      "done": {
+         "type": "circle",
+         "color": "fill",
+         "tags": [],
+         "radius": 800
+      },
+      "unit": {
+         "type": "ring",
+         "color": "fill",
+         "tags": [],
+         "radius": 800
       },
       "main": {
          "type": "sun",
          "query": {
-            "by_name": "full"
+            "by_name": "inprogress"
          },
-         "scale": 40,
-         "radius": 200,
+         "scale": 1,
+         "radius": 20,
          "segments": 5
       }
    }

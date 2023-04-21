@@ -55,7 +55,7 @@ pub fn in_progress_statespace() -> celldata::Statespace {
     let mut ret = vec![];
     for cv in in_progress_variants() {
         let mut cv_buff = vec![];
-        for j in 1..in_progress_max(cv) {
+        for j in 1..in_progress_max(cv) + 1 {
             cv_buff.push(celldata::CellState::InProgress {
                 variant: cv,
                 countdown: j,

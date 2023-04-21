@@ -6,7 +6,7 @@ use crate::{
 };
 use iced::{
     alignment::{Horizontal, Vertical},
-    widget::{button, container, image, text},
+    widget::{button, container, image, row, text},
 };
 use widget::Element;
 
@@ -32,7 +32,13 @@ pub fn to_gui<'a>(
     imgs: &ImgBuffer,
 ) -> Element<'a, Message> {
     let content = match has_image(s, imgs) {
-        Some(img) => crate::Element::from(image::viewer(img.clone())),
+        Some(img) => {
+            let v: celldata::CellStateVariant = s.into();
+            crate::Element::from(iced::widget::column(vec![
+                to_text(v.to_string()),
+                crate::Element::from(image::viewer(img.clone())),
+            ]))
+        }
         None => match s {
             celldata::CellState::Unit {
                 variant: celldata::CellStateVariant::Unused,
@@ -77,11 +83,6 @@ pub fn to_gui<'a>(
                     to_text("Hidden".to_string())
                 }
             }
-            /*
-            celldata::CellState::Hot { slot: state, .. } => {
-                to_text(format!("Hot {:?}", state).to_string())
-            }
-            */
             a => {
                 let v: celldata::CellStateVariant = a.into();
                 to_text(v.to_string())

@@ -1,7 +1,9 @@
+use std::collections::HashSet;
+
 use crate::{
     actionmachine,
     celldata::{self, CellState, CellStateData, CellStateVariant},
-    hexgrid::{self, Board, Pos},
+    hexgrid::{self, Pos},
     GameState,
 };
 
@@ -10,11 +12,11 @@ use crate::{
 // need to keep "available logistics" somewhere
 pub type LogisticsPlane = hexgrid::Hexgrid<LogisticsState>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LogisticsState {
     None,
     Source,
-    Available { locations: Vec<hexgrid::Pos> },
+    Available { locations: HashSet<hexgrid::Pos> },
 }
 
 pub fn new_plane(xmax: usize, ymax: usize) -> LogisticsPlane {
@@ -47,7 +49,6 @@ pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameS
     };
     hexgrid::set(pos, new_cell, &mut g.matrix);
     g = use_builder(pos, g);
-    g.resources.build_in_progress = g.resources.build_in_progress + 1;
     g.action_machine =
         actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
     g
@@ -155,8 +156,14 @@ fn buildtime(cv: CellStateVariant) -> actionmachine::InProgressWait {
         CellStateVariant::Seller => 1,
         CellStateVariant::Insulation => 2,
         CellStateVariant::ActionMachine => 3,
-        _ => 4,
+        CellStateVariant::Road => 1,
+        CellStateVariant::Hub => 10,
+        _ => unimplemented!("{:?}", cv),
     }
+}
+
+pub fn max_buildtime() -> actionmachine::InProgressWait {
+    buildable().into_iter().map(buildtime).max().unwrap()
 }
 
 fn max_builders() -> i32 {
@@ -188,6 +195,7 @@ pub fn statespace() -> celldata::Statespace {
             },
         })
     }
+    ret.push(celldata::unit_state(CellStateVariant::Road));
     ret
 }
 
@@ -198,6 +206,8 @@ pub fn buildable() -> Vec<CellStateVariant> {
         CellStateVariant::Feeder,
         CellStateVariant::ActionMachine,
         CellStateVariant::Seller,
+        CellStateVariant::Road,
+        CellStateVariant::Hub,
     ]
 }
 
@@ -205,30 +215,20 @@ pub fn explore_able() -> Vec<CellStateVariant> {
     vec![CellStateVariant::Unused]
 }
 
-pub fn finalize_build(
-    cv: CellStateVariant,
-    pos: hexgrid::Pos,
-    mut g: GameState,
-) -> (CellState, GameState) {
+pub fn finalize_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameState {
     g = return_builder(pos, g);
     do_build(cv, pos, g)
 }
 
-pub fn do_build(
-    cv: CellStateVariant,
-    pos: hexgrid::Pos,
-    mut g: GameState,
-) -> (CellState, GameState) {
+pub fn do_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameState {
     g.action_machine = actionmachine::remove(g.action_machine, pos, CellStateVariant::Building);
     g.action_machine = actionmachine::maybe_insert(g.action_machine, pos, cv);
-    let c = match cv {
+    let new_cell = match cv {
         a @ (CellStateVariant::Insulation
         | CellStateVariant::Feeder
         | CellStateVariant::Unused
-        | CellStateVariant::Seller) => CellState {
-            variant: a,
-            data: celldata::CellStateData::Unit,
-        },
+        | CellStateVariant::Seller
+        | CellStateVariant::Road) => celldata::unit_state(a),
         a @ CellStateVariant::Hot => CellState {
             variant: a,
             data: celldata::CellStateData::Slot {
@@ -244,10 +244,9 @@ pub fn do_build(
         },
         a @ CellStateVariant::Hub => {
             let builders = max_builders();
-            g.resources.build_points = g.resources.build_points + builders;
-            let new_cell = LogisticsState::Source;
-            hexgrid::set(pos, new_cell, &mut g.logistics_plane);
-            g.logistics_plane = add_to_neighbors(pos, g.logistics_plane);
+            let new_ls_cell = LogisticsState::Source;
+            hexgrid::set(pos, new_ls_cell, &mut g.logistics_plane);
+
             CellState {
                 variant: a,
                 data: celldata::CellStateData::Resource {
@@ -261,6 +260,13 @@ pub fn do_build(
             unimplemented!()
         }
     };
+    hexgrid::set(pos, new_cell, &mut g.matrix);
+    if cv == CellStateVariant::Hub {
+        g = update_logistics(pos, true, g);
+    }
+    if cv == CellStateVariant::Road {
+        g = update_logistics(pos, false, g);
+    }
     if let Some(new_delta) = celldata::leak_delta(cv, pos, &g.matrix) {
         g.resources.leak = g.resources.leak + new_delta;
         g.resources.heat_efficency = g.resources.tiles as f64 / g.resources.leak as f64;
@@ -268,27 +274,87 @@ pub fn do_build(
     if celldata::is_hot_v(cv) {
         g.resources.tiles = g.resources.tiles + 1;
     }
-    (c, g)
+    g
 }
 
-fn add_to_neighbors(pos: hexgrid::Pos, mut b: LogisticsPlane) -> LogisticsPlane {
-    b = hexgrid::neighbors(pos, &(b.clone()))
-        .filter_map(|i| i)
-        .fold(b, |mut acc, (pn, c)| match c {
-            LogisticsState::None => {
-                let new_cell = LogisticsState::Available {
-                    locations: vec![pos],
-                };
-                hexgrid::set(pn, new_cell, &mut acc);
-                acc
-            }
-            LogisticsState::Source { .. } => acc,
-            LogisticsState::Available { mut locations } => {
-                locations.push(pos);
-                let new_cell = LogisticsState::Available { locations };
-                hexgrid::set(pn, new_cell, &mut acc);
-                acc
-            }
-        });
-    b
+fn update_logistics(pos: hexgrid::Pos, is_hub: bool, mut g: GameState) -> GameState {
+    let other_hubs = find_connected_hubs(pos, &g);
+    let connected_hubs = if is_hub {
+        let mut tv: HashSet<_> = other_hubs.collect();
+        tv.insert(pos);
+        tv
+    } else {
+        other_hubs.collect()
+    };
+    let new_road_network = {
+        let mut other_roads: HashSet<_> = find_connected_roads(pos, &g).collect();
+        other_roads.insert(pos);
+        other_roads
+    };
+    dbg!((connected_hubs.clone(), new_road_network.clone()));
+    g.logistics_plane = add_to_neighbors(new_road_network, connected_hubs, g.logistics_plane);
+    g
+}
+
+fn find_connected_roads(pos: hexgrid::Pos, g: &GameState) -> impl Iterator<Item = hexgrid::Pos> {
+    hexgrid::get_connected(
+        pos,
+        |i| match i.into() {
+            CellStateVariant::Road => true,
+            _ => false,
+        },
+        &g.matrix,
+    )
+    .into_iter()
+    .map(|(p, _)| p)
+}
+
+fn find_connected_hubs(pos: hexgrid::Pos, g: &GameState) -> impl Iterator<Item = hexgrid::Pos> {
+    hexgrid::get_connected(
+        pos,
+        |i| match i.into() {
+            CellStateVariant::Hub => true,
+            CellStateVariant::Road => true,
+            _ => false,
+        },
+        &g.matrix,
+    )
+    .into_iter()
+    .filter(|(_p, c)| match (*c).into() {
+        CellStateVariant::Hub => true,
+        _ => false,
+    })
+    .map(|(p, _)| p)
+}
+
+fn add_to_neighbors(
+    src: impl IntoIterator<Item = hexgrid::Pos>,
+    to_add: impl IntoIterator<Item = hexgrid::Pos>,
+    lp: LogisticsPlane,
+) -> LogisticsPlane {
+    let new_subset: HashSet<_> = to_add.into_iter().collect();
+    if new_subset.is_empty() {
+        lp
+    } else {
+        src.into_iter().fold(lp, |b, src_item| {
+            hexgrid::neighbors(src_item, &(b.clone()))
+                .filter_map(|i| i)
+                .fold(b, |mut acc, (pn, c)| match c {
+                    LogisticsState::None => {
+                        let new_cell = LogisticsState::Available {
+                            locations: new_subset.clone(),
+                        };
+                        hexgrid::set(pn, new_cell, &mut acc);
+                        acc
+                    }
+                    LogisticsState::Source { .. } => acc,
+                    LogisticsState::Available { mut locations } => {
+                        locations = locations.union(&new_subset).cloned().collect();
+                        let new_cell = LogisticsState::Available { locations };
+                        hexgrid::set(pn, new_cell, &mut acc);
+                        acc
+                    }
+                })
+        })
+    }
 }

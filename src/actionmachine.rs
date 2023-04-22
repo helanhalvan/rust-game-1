@@ -70,7 +70,7 @@ pub fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
     match cv {
         celldata::CellStateVariant::ActionMachine => 3,
         celldata::CellStateVariant::Hot => 5,
-        celldata::CellStateVariant::Building => 4,
+        celldata::CellStateVariant::Building => building::max_buildtime(),
         a => {
             println!("unexpected {:?}", a);
             unimplemented!()
@@ -100,34 +100,37 @@ fn do_progress_done(
     on_done_data: OnDoneData,
     mut g: GameState,
 ) -> GameState {
-    let new_cell = match (cv, on_done_data) {
+    g = match (cv, on_done_data) {
         (celldata::CellStateVariant::ActionMachine, _) => {
-            g.resources.build_points = g.resources.build_points + 1;
-            celldata::CellState {
+            g.resources.wood = g.resources.wood + 1;
+            let new_cell = celldata::CellState {
                 variant: cv,
                 data: celldata::CellStateData::InProgress {
                     countdown: in_progress_max(cv),
                     on_done_data: OnDoneData::Nothing,
                 },
-            }
+            };
+            hexgrid::set(p, new_cell, &mut g.matrix);
+            g
         }
-        (celldata::CellStateVariant::Hot, _) => celldata::CellState {
-            variant: cv,
-            data: celldata::CellStateData::Slot {
-                slot: celldata::Slot::Done,
-            },
-        },
+        (celldata::CellStateVariant::Hot, _) => {
+            let new_cell = celldata::CellState {
+                variant: cv,
+                data: celldata::CellStateData::Slot {
+                    slot: celldata::Slot::Done,
+                },
+            };
+            hexgrid::set(p, new_cell, &mut g.matrix);
+            g
+        }
         (celldata::CellStateVariant::Building, OnDoneData::CellStateVariant(new_cv)) => {
-            let (new_c, new_g) = building::finalize_build(new_cv, p, g);
-            g = new_g;
-            new_c
+            building::finalize_build(new_cv, p, g)
         }
         a => {
             println!("unexpected {:?}{:?}{:?}", x, y, a);
             unimplemented!()
         }
     };
-    hexgrid::set(p, new_cell, &mut g.matrix);
     g
 }
 
@@ -244,7 +247,6 @@ fn do_tick(
                         },
                     };
                     hexgrid::set(*hp, new_cell, &mut g.matrix);
-                    g.resources.build_points = g.resources.build_points + 1;
                     g.resources.wood = g.resources.wood + 40;
                 }
                 _ => {}

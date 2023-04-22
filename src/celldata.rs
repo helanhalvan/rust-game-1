@@ -39,18 +39,9 @@ pub type Statespace = Vec<CellState>;
 // all possible non-interactive cellstates, used by the UI
 pub fn non_interactive_statespace() -> Statespace {
     let mut ret = vec![
-        CellState {
-            data: CellStateData::Unit,
-            variant: CellStateVariant::Insulation,
-        },
-        CellState {
-            data: CellStateData::Unit,
-            variant: CellStateVariant::Feeder,
-        },
-        CellState {
-            data: CellStateData::Unit,
-            variant: CellStateVariant::Seller,
-        },
+        unit_state(CellStateVariant::Insulation),
+        unit_state(CellStateVariant::Feeder),
+        unit_state(CellStateVariant::Seller),
         CellState {
             variant: CellStateVariant::Hot,
             data: CellStateData::Slot { slot: Slot::Empty },
@@ -65,6 +56,13 @@ pub fn non_interactive_statespace() -> Statespace {
     ret
 }
 
+pub fn unit_state(cv: CellStateVariant) -> CellState {
+    CellState {
+        data: CellStateData::Unit,
+        variant: cv,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CellStateVariant {
     Hidden,
@@ -76,8 +74,9 @@ pub enum CellStateVariant {
     Seller,
     InProgress,
     Building,
-    Last,
     Hub,
+    Road,
+    Last, //NEEDS TO EXIST AND BE LAST
 }
 
 impl Into<CellStateVariant> for CellState {

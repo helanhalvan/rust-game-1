@@ -40,7 +40,7 @@ pub fn main() {
 #[derive(Debug, Clone)]
 pub struct GameState {
     matrix: hexgrid::Board,
-    logistics_plane: building::Board,
+    logistics_plane: building::LogisticsPlane,
     resources: GameResources,
     action_machine: actionmachine::ActionMachine,
     img_buffer: visualize_cell::ImgBuffer,

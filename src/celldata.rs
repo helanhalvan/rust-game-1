@@ -21,7 +21,8 @@ pub enum CellStateData {
         on_done_data: actionmachine::OnDoneData,
     },
     Resource {
-        slot: i32,
+        left: i32,
+        total: i32,
     },
 }
 
@@ -57,18 +58,6 @@ pub fn non_interactive_statespace() -> Statespace {
         CellState {
             variant: CellStateVariant::Hot,
             data: CellStateData::Slot { slot: Slot::Done },
-        },
-        CellState {
-            variant: CellStateVariant::Hub,
-            data: CellStateData::Resource { slot: 1 },
-        },
-        CellState {
-            variant: CellStateVariant::Hub,
-            data: CellStateData::Resource { slot: 2 },
-        },
-        CellState {
-            variant: CellStateVariant::Hub,
-            data: CellStateData::Resource { slot: 3 },
         },
     ];
     ret.append(&mut actionmachine::statespace());

@@ -43,8 +43,8 @@ pub fn make_imgs() {
                 celldata::CellStateData::InProgress { countdown, .. } => {
                     (countdown, "inprogress".to_string())
                 }
-                celldata::CellStateData::Resource { slot, .. } => {
-                    (slot.try_into().unwrap(), "inprogress".to_string())
+                celldata::CellStateData::Resource { left: used, .. } => {
+                    (used.try_into().unwrap(), "inprogress".to_string())
                 }
                 celldata::CellStateData::Unit { .. } => (1, "inprogress".to_string()),
                 celldata::CellStateData::Slot {
@@ -86,10 +86,10 @@ fn make_path(cellstate: celldata::CellState) -> String {
             let _ = fs::create_dir_all(dir.clone());
             dir + "inprogress_" + &countdown.to_string() + &".png"
         }
-        celldata::CellStateData::Resource { slot, .. } => {
+        celldata::CellStateData::Resource { left: used, .. } => {
             let dir = "./img/".to_string() + &cv.to_string();
             let _ = fs::create_dir_all(dir.clone());
-            dir + "inprogress_" + &slot.to_string() + &".png"
+            dir + "inprogress_" + &used.to_string() + &".png"
         }
         celldata::CellStateData::Unit { .. } => {
             let dir = "./img/".to_string() + &cv.to_string();

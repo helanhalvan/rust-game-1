@@ -76,6 +76,7 @@ pub enum CellStateVariant {
     Building,
     Hub,
     Road,
+    OutOfBounds,
     Last, //NEEDS TO EXIST AND BE LAST
 }
 

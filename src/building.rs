@@ -286,13 +286,13 @@ fn update_logistics(pos: hexgrid::Pos, is_hub: bool, mut g: GameState) -> GameSt
     } else {
         other_hubs.collect()
     };
-    let new_road_network = {
+    let new_network = {
         let mut other_roads: HashSet<_> = find_connected_roads(pos, &g).collect();
         other_roads.insert(pos);
         other_roads
     };
-    dbg!((connected_hubs.clone(), new_road_network.clone()));
-    g.logistics_plane = add_to_neighbors(new_road_network, connected_hubs, g.logistics_plane);
+    dbg!((connected_hubs.clone(), new_network.clone()));
+    g.logistics_plane = add_to_neighbors(new_network, connected_hubs, g.logistics_plane);
     g
 }
 

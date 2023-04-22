@@ -1,14 +1,69 @@
 use std::collections::HashSet;
 
 use crate::celldata;
+use std::hash::Hash;
 
 pub type Hexgrid<T> = Vec<Vec<T>>;
 pub type Board = Hexgrid<celldata::CellState>;
 
+pub type Pos = XYCont<usize>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Pos {
-    pub x: usize,
-    pub y: usize,
+pub struct XYCont<C> {
+    pub x: C,
+    pub y: C,
+}
+
+pub fn sub_matrix<T: Clone>(
+    source: &Hexgrid<T>,
+    _center @ XYCont { x, y }: XYCont<i32>,
+    height_extra: i32,
+    width_extra: i32,
+    default: T,
+) -> Hexgrid<T> {
+    let mut ret = vec![];
+    for dx in 0..(height_extra + 1) {
+        let mut y_buff = vec![];
+        for dy in 0..(width_extra + 1) {
+            let new = if let Some((_, new)) = to_pos_cell(
+                XYCont {
+                    x: x + dx,
+                    y: y + dy,
+                },
+                source,
+            ) {
+                new
+            } else {
+                default.clone()
+            };
+            y_buff.push(new);
+        }
+        ret.push(y_buff)
+    }
+    ret
+}
+
+pub fn to_pos_cell<T: Clone, C: TryInto<usize>>(
+    XYCont { x: raw_x, y: raw_y }: XYCont<C>,
+    source: &Hexgrid<T>,
+) -> Option<(Pos, T)> {
+    match raw_x.try_into() {
+        Ok(x1) => match raw_y.try_into() {
+            Ok(y1) => {
+                let x: usize = x1;
+                let y: usize = y1;
+                match source.get(x) {
+                    Some(v) => match v.get(y) {
+                        Some(i) => Some((Pos { x, y }, i.clone())),
+                        None => None,
+                    },
+                    None => None,
+                }
+            }
+            Err(_) => None,
+        },
+        Err(_) => None,
+    }
 }
 
 pub fn pos_iter_to_cells<'a, T: Clone>(

@@ -9,6 +9,7 @@ pub mod visualize_cell;
 use iced::executor;
 use iced::widget::{button, container};
 use iced::{Application, Command, Length, Settings};
+use iced_native::row;
 use widget::Element;
 
 mod widget {
@@ -37,6 +38,8 @@ pub fn main() {
     }
 }
 
+pub type WindowPos = iced_native::Point;
+
 #[derive(Debug, Clone)]
 pub struct GameState {
     matrix: hexgrid::Board,
@@ -44,6 +47,10 @@ pub struct GameState {
     resources: GameResources,
     action_machine: actionmachine::ActionMachine,
     img_buffer: visualize_cell::ImgBuffer,
+    window_center: iced_native::Point,
+    latest_cursor: iced_native::Point,
+    is_mousedown: bool,
+    top_left_pos: hexgrid::XYCont<i32>,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct GameResources {
@@ -53,10 +60,11 @@ pub struct GameResources {
     wood: i32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Message {
     Build(celldata::CellStateVariant, hexgrid::Pos),
     EndTurn,
+    NativeEvent(iced_native::Event),
 }
 
 impl Application for GameState {
@@ -65,9 +73,13 @@ impl Application for GameState {
     type Theme = css::Theme;
     type Flags = ();
 
+    fn subscription(&self) -> iced::Subscription<Self::Message> {
+        iced_native::subscription::events().map(Message::NativeEvent)
+    }
+
     fn new(_flags: ()) -> (Self, Command<Message>) {
-        let xmax = 5;
-        let ymax = 9;
+        let xmax = 50;
+        let ymax = 90;
         let m1 = vec![
             vec![
                 celldata::CellState {
@@ -89,6 +101,10 @@ impl Application for GameState {
             },
             action_machine: actionmachine::new(),
             img_buffer: visualize_cell::new_img_buffer(),
+            window_center: iced::Point { x: 0.0, y: 0.0 },
+            latest_cursor: iced::Point { x: 0.0, y: 0.0 },
+            is_mousedown: false,
+            top_left_pos: hexgrid::XYCont { x: 0, y: 0 },
         };
         let p = hexgrid::Pos { x: 4, y: 2 };
         let cv = celldata::CellStateVariant::Hub;
@@ -106,18 +122,55 @@ impl Application for GameState {
             Message::EndTurn => {
                 *self = actionmachine::run(self.clone());
             }
+            Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::CursorMoved {
+                position,
+            })) => {
+                if (*self).is_mousedown == true {
+                    let old_p = (*self).latest_cursor;
+                    let delta = old_p - position;
+                    (*self).window_center = (*self).window_center + delta;
+                    (*self).top_left_pos = approx((*self).window_center);
+                }
+                (*self).latest_cursor = position;
+            }
+            Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::ButtonPressed(
+                iced::mouse::Button::Left,
+            ))) => {
+                (*self).is_mousedown = true;
+            }
+            Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+                iced::mouse::Button::Left,
+            ))) => {
+                (*self).is_mousedown = false;
+            }
+            Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::CursorLeft)) => {
+                (*self).is_mousedown = false;
+            }
+            Message::NativeEvent(e) => {
+                dbg!(e);
+            }
         }
         Command::none()
     }
 
     fn view(&self) -> Element<Message> {
-        let x = self
-            .matrix
+        let view_matrix = hexgrid::sub_matrix(
+            &self.matrix,
+            self.top_left_pos,
+            8,
+            4,
+            celldata::unit_state(celldata::CellStateVariant::OutOfBounds),
+        );
+        let hexgrid::XYCont {
+            x: base_x,
+            y: base_y,
+        } = self.top_left_pos;
+        let x = view_matrix
             .iter()
             .enumerate()
             .map(|(x_index, i)| {
                 let padding: Element<'static, Message> =
-                    crate::Element::from(if x_index % 2 == 0 {
+                    crate::Element::from(if (base_x + x_index as i32) % 2 == 0 {
                         container("").width(100).height(50)
                     } else {
                         container("").width(10).height(10)
@@ -126,18 +179,17 @@ impl Application for GameState {
                     .iter()
                     .enumerate()
                     .map(|(y_index, i)| {
+                        let yet_another_x: i32 = x_index.try_into().unwrap();
+                        let yet_another_y: i32 = y_index.try_into().unwrap();
+                        let matrix_x: i32 = base_x + yet_another_x;
+                        let matrix_y: i32 = base_y + yet_another_y;
                         visualize_cell::to_gui(
-                            x_index,
-                            y_index,
-                            building::has_actions(
-                                hexgrid::Pos {
-                                    x: x_index,
-                                    y: y_index,
-                                },
-                                self,
-                            ),
+                            hexgrid::XYCont {
+                                x: matrix_x,
+                                y: matrix_y,
+                            },
                             i.clone(),
-                            &self.img_buffer,
+                            &self,
                         )
                     })
                     .collect();
@@ -152,12 +204,24 @@ impl Application for GameState {
         let end_turn_content = visualize_cell::to_text("End Turn".to_string());
         let buttom_buttons =
             crate::Element::from(button(end_turn_content).on_press(Message::EndTurn));
-        let content = iced::widget::Column::with_children(vec![matrix, resources, buttom_buttons]);
+        let ui_misc = crate::Element::from(row![
+            visualize_cell::to_text(format!("{:?}", self.window_center).to_string()),
+            visualize_cell::to_text(format!("{:?}", self.latest_cursor).to_string()),
+        ]);
+        let content =
+            iced::widget::Column::with_children(vec![matrix, resources, buttom_buttons, ui_misc]);
 
         container(content)
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(20)
             .into()
+    }
+}
+
+fn approx(iced::Point { x, y }: iced_native::Point) -> hexgrid::XYCont<i32> {
+    hexgrid::XYCont {
+        x: (x / 100.0) as i32,
+        y: (y / 100.0) as i32,
     }
 }

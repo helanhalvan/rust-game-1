@@ -17,7 +17,7 @@ pub static ACTION_MAX_PRIO: Prio = (*(&CellStateVariant::Last)) as Prio;
 // to limit effects of order added on order executed
 pub fn prio(cv: celldata::CellStateVariant) -> Option<Prio> {
     match cv {
-        CellStateVariant::ActionMachine
+        CellStateVariant::WoodCutter
         | CellStateVariant::Hot
         | CellStateVariant::Feeder
         | CellStateVariant::Seller
@@ -61,14 +61,14 @@ pub enum OnDoneData {
 
 pub fn in_progress_variants() -> [celldata::CellStateVariant; 2] {
     [
-        celldata::CellStateVariant::ActionMachine,
+        celldata::CellStateVariant::WoodCutter,
         celldata::CellStateVariant::Hot,
     ]
 }
 
 pub fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
     match cv {
-        celldata::CellStateVariant::ActionMachine => 3,
+        celldata::CellStateVariant::WoodCutter => 3,
         celldata::CellStateVariant::Hot => 5,
         celldata::CellStateVariant::Building => building::max_buildtime(),
         a => {
@@ -101,7 +101,7 @@ fn do_progress_done(
     mut g: GameState,
 ) -> GameState {
     g = match (cv, on_done_data) {
-        (celldata::CellStateVariant::ActionMachine, _) => {
+        (celldata::CellStateVariant::WoodCutter, _) => {
             g.resources.wood = g.resources.wood + 1;
             let new_cell = celldata::CellState {
                 variant: cv,

@@ -47,10 +47,10 @@ pub struct GameState {
     resources: GameResources,
     action_machine: actionmachine::ActionMachine,
     img_buffer: visualize_cell::ImgBuffer,
-    window_center: iced_native::Point,
+    top_left_pos: iced_native::Point,
     latest_cursor: iced_native::Point,
     is_mousedown: bool,
-    top_left_pos: hexgrid::XYCont<i32>,
+    top_left_hex: hexgrid::XYCont<i32>,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct GameResources {
@@ -80,6 +80,8 @@ impl Application for GameState {
     fn new(_flags: ()) -> (Self, Command<Message>) {
         let xmax = 50;
         let ymax = 90;
+        let start_x: usize = 25;
+        let start_y: usize = 45;
         let m1 = vec![
             vec![
                 celldata::CellState {
@@ -101,12 +103,23 @@ impl Application for GameState {
             },
             action_machine: actionmachine::new(),
             img_buffer: visualize_cell::new_img_buffer(),
-            window_center: iced::Point { x: 0.0, y: 0.0 },
+            top_left_pos: iced::Point {
+                x: (start_x as f32 - (visualize_cell::VIEW_CELLS_X / 2) as f32)
+                    * visualize_cell::CELL_X_SIZE,
+                y: (start_y as f32 - (visualize_cell::VIEW_CELLS_Y / 2) as f32)
+                    * visualize_cell::CELL_Y_SIZE,
+            },
             latest_cursor: iced::Point { x: 0.0, y: 0.0 },
             is_mousedown: false,
-            top_left_pos: hexgrid::XYCont { x: 0, y: 0 },
+            top_left_hex: hexgrid::XYCont {
+                x: start_x as i32 - (visualize_cell::VIEW_CELLS_X / 2),
+                y: start_y as i32 - (visualize_cell::VIEW_CELLS_Y / 2),
+            },
         };
-        let p = hexgrid::Pos { x: 4, y: 2 };
+        let p = hexgrid::Pos {
+            x: start_x,
+            y: start_y,
+        };
         let cv = celldata::CellStateVariant::Hub;
         g = building::do_build(cv, p, g);
         (g, Command::none())
@@ -128,8 +141,8 @@ impl Application for GameState {
                 if (*self).is_mousedown == true {
                     let old_p = (*self).latest_cursor;
                     let delta = old_p - position;
-                    (*self).window_center = (*self).window_center + delta;
-                    (*self).top_left_pos = approx((*self).window_center);
+                    (*self).top_left_pos = (*self).top_left_pos + delta;
+                    (*self).top_left_hex = approx((*self).top_left_pos);
                 }
                 (*self).latest_cursor = position;
             }
@@ -146,9 +159,7 @@ impl Application for GameState {
             Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::CursorLeft)) => {
                 (*self).is_mousedown = false;
             }
-            Message::NativeEvent(e) => {
-                dbg!(e);
-            }
+            Message::NativeEvent(_) => {}
         }
         Command::none()
     }
@@ -156,22 +167,24 @@ impl Application for GameState {
     fn view(&self) -> Element<Message> {
         let view_matrix = hexgrid::sub_matrix(
             &self.matrix,
-            self.top_left_pos,
-            8,
-            4,
+            self.top_left_hex,
+            visualize_cell::VIEW_CELLS_X - 1,
+            visualize_cell::VIEW_CELLS_Y - 1,
             celldata::unit_state(celldata::CellStateVariant::OutOfBounds),
         );
         let hexgrid::XYCont {
             x: base_x,
             y: base_y,
-        } = self.top_left_pos;
+        } = self.top_left_hex;
         let x = view_matrix
             .iter()
             .enumerate()
             .map(|(x_index, i)| {
                 let padding: Element<'static, Message> =
                     crate::Element::from(if (base_x + x_index as i32) % 2 == 0 {
-                        container("").width(100).height(50)
+                        container("")
+                            .width(visualize_cell::CELL_Y_SIZE)
+                            .height(visualize_cell::CELL_X_SIZE / 2.0)
                     } else {
                         container("").width(10).height(10)
                     });
@@ -205,7 +218,7 @@ impl Application for GameState {
         let buttom_buttons =
             crate::Element::from(button(end_turn_content).on_press(Message::EndTurn));
         let ui_misc = crate::Element::from(row![
-            visualize_cell::to_text(format!("{:?}", self.window_center).to_string()),
+            visualize_cell::to_text(format!("{:?}", self.top_left_pos).to_string()),
             visualize_cell::to_text(format!("{:?}", self.latest_cursor).to_string()),
         ]);
         let content =
@@ -221,7 +234,7 @@ impl Application for GameState {
 
 fn approx(iced::Point { x, y }: iced_native::Point) -> hexgrid::XYCont<i32> {
     hexgrid::XYCont {
-        x: (x / 100.0) as i32,
-        y: (y / 100.0) as i32,
+        x: (x / visualize_cell::CELL_X_SIZE) as i32,
+        y: (y / visualize_cell::CELL_Y_SIZE) as i32,
     }
 }

@@ -25,6 +25,11 @@ fn has_image(s: celldata::CellState, buff: &ImgBuffer) -> Option<&image::Handle>
     buff.get(&s)
 }
 
+pub const CELL_X_SIZE: f32 = 100.0;
+pub const CELL_Y_SIZE: f32 = 125.0;
+pub const VIEW_CELLS_X: i32 = 7;
+pub const VIEW_CELLS_Y: i32 = 5;
+
 pub fn to_gui<'a>(
     raw_pos: hexgrid::XYCont<i32>,
     s: celldata::CellState,
@@ -41,23 +46,20 @@ pub fn to_gui<'a>(
         }
         None => {
             if let Some((pos, _)) = hexgrid::to_pos_cell(raw_pos, &g.matrix) {
-                match (s, building::has_actions(pos, g)) {
-                    (
-                        celldata::CellState {
-                            variant: celldata::CellStateVariant::Unused,
-                            ..
-                        },
-                        true,
-                    ) => {
-                        let grid = to_rectangle(building::buildable(), 3, 4)
+                match building::has_actions(pos, s, g) {
+                    Some(actions) => {
+                        let layout = if actions.len() > 3 {
+                            to_rectangle(actions, 4, 2)
+                        } else {
+                            to_rectangle(actions, 3, 1)
+                        };
+                        let grid = layout
                             .iter()
                             .map(|v| {
                                 crate::Element::from(iced::widget::row(
                                     v.into_iter()
                                         .map(|i| {
-                                            let button_content = to_text(
-                                                i.to_string().chars().next().unwrap().to_string(),
-                                            );
+                                            let button_content = to_text(i.to_string());
                                             crate::Element::from(
                                                 button(button_content)
                                                     .on_press(Message::Build(*i, pos)),
@@ -69,23 +71,7 @@ pub fn to_gui<'a>(
                             .collect();
                         crate::Element::from(iced::widget::column(grid))
                     }
-                    (
-                        celldata::CellState {
-                            variant: celldata::CellStateVariant::Hidden,
-                            ..
-                        },
-                        true,
-                    ) => {
-                        let button_text = "Explore".to_string();
-                        let button_content = to_text(button_text);
-                        let b1 = button(button_content)
-                            .on_press(Message::Build(celldata::CellStateVariant::Unused, pos));
-                        crate::Element::from(b1)
-                    }
-                    (a, _) => {
-                        dbg!(a);
-                        backup_formatter(s)
-                    }
+                    None => backup_formatter(s),
                 }
             } else {
                 backup_formatter(s)
@@ -94,8 +80,8 @@ pub fn to_gui<'a>(
     };
     crate::Element::from(
         container(content)
-            .width(100)
-            .height(100)
+            .width(CELL_Y_SIZE)
+            .height(CELL_X_SIZE)
             .style(css::Container::Bordered)
             .align_x(Horizontal::Center)
             .align_y(Vertical::Center),

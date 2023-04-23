@@ -1,14 +1,8 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fs,
-};
+use std::{collections::HashMap, fs};
 
 use image_generator::{objects::Object, structure::Structure};
 
-use crate::{
-    actionmachine::OnDoneData,
-    celldata::{self},
-};
+use crate::celldata::{self};
 
 pub fn all_imgs() -> Vec<(celldata::CellState, String)> {
     let mut all_imgs_buff = Vec::new();

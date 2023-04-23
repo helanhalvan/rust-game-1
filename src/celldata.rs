@@ -70,13 +70,17 @@ pub enum CellStateVariant {
     Hot,
     Insulation,
     Feeder,
-    ActionMachine,
+    WoodCutter,
     Seller,
     InProgress,
     Building,
     Hub,
     Road,
     OutOfBounds,
+    Industry,
+    Infrastructure,
+    Extract,
+    Back,
     Last, //NEEDS TO EXIST AND BE LAST
 }
 

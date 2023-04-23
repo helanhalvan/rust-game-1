@@ -23,7 +23,98 @@ pub fn new_plane(xmax: usize, ymax: usize) -> LogisticsPlane {
     vec![vec![LogisticsState::None; xmax]; ymax]
 }
 
-pub fn has_actions(pos: hexgrid::Pos, g: &GameState) -> bool {
+pub fn has_actions(
+    pos: hexgrid::Pos,
+    c: celldata::CellState,
+    g: &GameState,
+) -> Option<Vec<CellStateVariant>> {
+    if has_logistics(pos, g) {
+        match c.variant {
+            CellStateVariant::Hidden => Some(explore_able()),
+            CellStateVariant::Unused => Some(buildable()),
+            CellStateVariant::Industry => Some(industry()),
+            CellStateVariant::Infrastructure => Some(infrastructure()),
+            CellStateVariant::Extract => Some(extract()),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
+fn extract() -> Vec<CellStateVariant> {
+    vec![
+        CellStateVariant::WoodCutter,
+        CellStateVariant::Seller,
+        CellStateVariant::Back,
+    ]
+}
+
+fn industry() -> Vec<CellStateVariant> {
+    vec![
+        CellStateVariant::Hot,
+        CellStateVariant::Insulation,
+        CellStateVariant::Feeder,
+        CellStateVariant::Back,
+    ]
+}
+
+fn infrastructure() -> Vec<CellStateVariant> {
+    vec![
+        CellStateVariant::Road,
+        CellStateVariant::Hub,
+        CellStateVariant::Back,
+    ]
+}
+
+pub fn buildable() -> Vec<CellStateVariant> {
+    vec![
+        CellStateVariant::Industry,
+        CellStateVariant::Extract,
+        CellStateVariant::Infrastructure,
+    ]
+}
+
+fn menu_variant_transition(cv0: CellStateVariant) -> Option<CellState> {
+    match cv0 {
+        CellStateVariant::Industry
+        | CellStateVariant::Infrastructure
+        | CellStateVariant::Extract => Some(celldata::unit_state(cv0)),
+        CellStateVariant::Back => Some(celldata::unit_state(CellStateVariant::Unused)),
+        _ => None,
+    }
+}
+
+pub fn explore_able() -> Vec<CellStateVariant> {
+    vec![CellStateVariant::Unused]
+}
+
+fn has_buildtime() -> Vec<CellStateVariant> {
+    let mut ret = industry();
+    ret.append(&mut infrastructure());
+    ret.append(&mut extract());
+    ret
+}
+
+fn buildtime(cv: CellStateVariant) -> actionmachine::InProgressWait {
+    match cv {
+        CellStateVariant::Unused => 2,
+        CellStateVariant::Hot => 4,
+        CellStateVariant::Feeder => 1,
+        CellStateVariant::Seller => 1,
+        CellStateVariant::Insulation => 2,
+        CellStateVariant::WoodCutter => 3,
+        CellStateVariant::Road => 1,
+        CellStateVariant::Hub => 10,
+        _ => unimplemented!("{:?}", cv),
+    }
+}
+
+pub fn max_buildtime() -> actionmachine::InProgressWait {
+    has_buildtime().into_iter().map(buildtime).max().unwrap()
+}
+
+fn has_logistics(pos: hexgrid::Pos, g: &GameState) -> bool {
     match hexgrid::get(pos, &g.matrix) {
         CellState {
             variant: celldata::CellStateVariant::Hub,
@@ -32,7 +123,7 @@ pub fn has_actions(pos: hexgrid::Pos, g: &GameState) -> bool {
         _ => match hexgrid::get(pos, &g.logistics_plane) {
             LogisticsState::None => false,
             LogisticsState::Available { locations } => {
-                locations.into_iter().any(|i| has_actions(i, g))
+                locations.into_iter().any(|i| has_logistics(i, g))
             }
             a => unimplemented!("{:?}", a),
         },
@@ -40,18 +131,23 @@ pub fn has_actions(pos: hexgrid::Pos, g: &GameState) -> bool {
 }
 
 pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameState {
-    let new_cell = celldata::CellState {
-        variant: CellStateVariant::Building,
-        data: celldata::CellStateData::InProgress {
-            countdown: buildtime(cv),
-            on_done_data: actionmachine::OnDoneData::CellStateVariant(cv),
-        },
-    };
-    hexgrid::set(pos, new_cell, &mut g.matrix);
-    g = use_builder(pos, g);
-    g.action_machine =
-        actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
-    g
+    if let Some(new_cell) = menu_variant_transition(cv) {
+        hexgrid::set(pos, new_cell, &mut g.matrix);
+        g
+    } else {
+        let new_cell = celldata::CellState {
+            variant: CellStateVariant::Building,
+            data: celldata::CellStateData::InProgress {
+                countdown: buildtime(cv),
+                on_done_data: actionmachine::OnDoneData::CellStateVariant(cv),
+            },
+        };
+        hexgrid::set(pos, new_cell, &mut g.matrix);
+        g = use_builder(pos, g);
+        g.action_machine =
+            actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
+        g
+    }
 }
 
 fn use_builder(pos: hexgrid::Pos, mut g: GameState) -> GameState {
@@ -148,31 +244,13 @@ fn find_logistcs_node(
     }
 }
 
-fn buildtime(cv: CellStateVariant) -> actionmachine::InProgressWait {
-    match cv {
-        CellStateVariant::Unused => 2,
-        CellStateVariant::Hot => 4,
-        CellStateVariant::Feeder => 1,
-        CellStateVariant::Seller => 1,
-        CellStateVariant::Insulation => 2,
-        CellStateVariant::ActionMachine => 3,
-        CellStateVariant::Road => 1,
-        CellStateVariant::Hub => 10,
-        _ => unimplemented!("{:?}", cv),
-    }
-}
-
-pub fn max_buildtime() -> actionmachine::InProgressWait {
-    buildable().into_iter().map(buildtime).max().unwrap()
-}
-
 fn max_builders() -> i32 {
     3
 }
 
 pub fn statespace() -> celldata::Statespace {
     let cv = celldata::CellStateVariant::Building;
-    let mut to_build = buildable();
+    let mut to_build = has_buildtime();
     to_build.append(&mut explore_able());
     let mut ret = vec![];
     for j in 1..actionmachine::in_progress_max(cv) + 1 {
@@ -199,22 +277,6 @@ pub fn statespace() -> celldata::Statespace {
     ret
 }
 
-pub fn buildable() -> Vec<CellStateVariant> {
-    vec![
-        CellStateVariant::Hot,
-        CellStateVariant::Insulation,
-        CellStateVariant::Feeder,
-        CellStateVariant::ActionMachine,
-        CellStateVariant::Seller,
-        CellStateVariant::Road,
-        CellStateVariant::Hub,
-    ]
-}
-
-pub fn explore_able() -> Vec<CellStateVariant> {
-    vec![CellStateVariant::Unused]
-}
-
 pub fn finalize_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameState {
     g = return_builder(pos, g);
     do_build(cv, pos, g)
@@ -235,7 +297,7 @@ pub fn do_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> Ga
                 slot: celldata::Slot::Empty,
             },
         },
-        a @ CellStateVariant::ActionMachine => CellState {
+        a @ CellStateVariant::WoodCutter => CellState {
             variant: a,
             data: celldata::CellStateData::InProgress {
                 countdown: 3,
@@ -291,7 +353,6 @@ fn update_logistics(pos: hexgrid::Pos, is_hub: bool, mut g: GameState) -> GameSt
         other_roads.insert(pos);
         other_roads
     };
-    dbg!((connected_hubs.clone(), new_network.clone()));
     g.logistics_plane = add_to_neighbors(new_network, connected_hubs, g.logistics_plane);
     g
 }

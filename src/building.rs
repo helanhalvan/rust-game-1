@@ -96,22 +96,26 @@ fn has_buildtime() -> Vec<CellStateVariant> {
     ret
 }
 
-fn buildtime(cv: CellStateVariant) -> actionmachine::InProgressWait {
+fn buildtime(cv: CellStateVariant) -> Option<actionmachine::InProgressWait> {
     match cv {
-        CellStateVariant::Unused => 2,
-        CellStateVariant::Hot => 4,
-        CellStateVariant::Feeder => 1,
-        CellStateVariant::Seller => 1,
-        CellStateVariant::Insulation => 2,
-        CellStateVariant::WoodCutter => 3,
-        CellStateVariant::Road => 1,
-        CellStateVariant::Hub => 10,
-        _ => unimplemented!("{:?}", cv),
+        CellStateVariant::Unused => Some(2),
+        CellStateVariant::Hot => Some(4),
+        CellStateVariant::Feeder => Some(1),
+        CellStateVariant::Seller => Some(1),
+        CellStateVariant::Insulation => Some(2),
+        CellStateVariant::WoodCutter => Some(3),
+        CellStateVariant::Road => Some(1),
+        CellStateVariant::Hub => Some(10),
+        _ => None,
     }
 }
 
 pub fn max_buildtime() -> actionmachine::InProgressWait {
-    has_buildtime().into_iter().map(buildtime).max().unwrap()
+    has_buildtime()
+        .into_iter()
+        .filter_map(buildtime)
+        .max()
+        .unwrap()
 }
 
 fn has_logistics(pos: hexgrid::Pos, g: &GameState) -> bool {
@@ -134,11 +138,11 @@ pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameS
     if let Some(new_cell) = menu_variant_transition(cv) {
         hexgrid::set(pos, new_cell, &mut g.matrix);
         g
-    } else {
+    } else if let Some(b) = buildtime(cv) {
         let new_cell = celldata::CellState {
             variant: CellStateVariant::Building,
             data: celldata::CellStateData::InProgress {
-                countdown: buildtime(cv),
+                countdown: b,
                 on_done_data: actionmachine::OnDoneData::CellStateVariant(cv),
             },
         };
@@ -147,6 +151,8 @@ pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameS
         g.action_machine =
             actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
         g
+    } else {
+        unimplemented!("{:?}", (cv, pos, g))
     }
 }
 

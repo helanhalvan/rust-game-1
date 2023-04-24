@@ -5,7 +5,7 @@ use crate::{
     celldata::{self, CellState, CellStateData, CellStateVariant},
     hexgrid::{self},
     logistics_plane::{self, LogisticsPlane, LogisticsState},
-    GameState,
+    resource, GameState,
 };
 
 pub fn has_actions(
@@ -150,13 +150,9 @@ pub fn statespace() -> celldata::Statespace {
         }
     }
     for i in 0..max_builders() + 1 {
-        ret.push(CellState {
-            variant: CellStateVariant::Hub,
-            data: CellStateData::Resource {
-                left: i,
-                total: max_builders(),
-            },
-        })
+        for j in 0..max_lp() {
+            ret.push(resource::new_stockpile(CellStateVariant::Hub, i, j))
+        }
     }
     ret.push(celldata::unit_state(CellStateVariant::Road));
     ret
@@ -194,14 +190,7 @@ pub fn do_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> Ga
             let logistics_points = max_lp();
             let new_ls_cell = LogisticsState::Source;
             hexgrid::set(pos, new_ls_cell, &mut g.logistics_plane);
-
-            CellState {
-                variant: a,
-                data: celldata::CellStateData::Resource2x {
-                    left: [builders, logistics_points],
-                    total: [builders, logistics_points],
-                },
-            }
+            resource::new_stockpile(cv, builders, logistics_points)
         }
         _ => {
             println!("unexpected {:?}", cv);

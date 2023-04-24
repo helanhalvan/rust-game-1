@@ -2,7 +2,10 @@ use std::{collections::HashMap, fs};
 
 use image_generator::{objects::Object, structure::Structure};
 
-use crate::celldata::{self};
+use crate::{
+    celldata::{self},
+    resource,
+};
 
 pub fn all_imgs() -> Vec<(celldata::CellState, String)> {
     let mut all_imgs_buff = Vec::new();
@@ -37,13 +40,10 @@ pub fn make_imgs() {
                 celldata::CellStateData::InProgress { countdown, .. } => {
                     (countdown, "inprogress".to_string())
                 }
-                celldata::CellStateData::Resource { left: used, .. } => {
-                    (used.try_into().unwrap(), "inprogress".to_string())
+                celldata::CellStateData::Resource { resources: r, .. } => {
+                    let count = resource::get(resource::ResouceType::Builders, r);
+                    (count.try_into().unwrap(), "inprogress".to_string())
                 }
-                // TODO do better here
-                celldata::CellStateData::Resource2x {
-                    left: [used, _], ..
-                } => (used.try_into().unwrap(), "inprogress".to_string()),
                 celldata::CellStateData::Unit { .. } => (1, "inprogress".to_string()),
                 celldata::CellStateData::Slot {
                     slot: celldata::Slot::Done,
@@ -84,17 +84,11 @@ fn make_path(cellstate: celldata::CellState) -> String {
             let _ = fs::create_dir_all(dir.clone());
             dir + "inprogress_" + &countdown.to_string() + &".png"
         }
-        celldata::CellStateData::Resource { left: used, .. } => {
+        celldata::CellStateData::Resource { resources: r, .. } => {
+            let count = resource::get(resource::ResouceType::Builders, r);
             let dir = "./img/".to_string() + &cv.to_string();
             let _ = fs::create_dir_all(dir.clone());
-            dir + "inprogress_" + &used.to_string() + &".png"
-        }
-        celldata::CellStateData::Resource2x {
-            left: [used, _], ..
-        } => {
-            let dir = "./img/".to_string() + &cv.to_string();
-            let _ = fs::create_dir_all(dir.clone());
-            dir + "inprogress_" + &used.to_string() + &".png"
+            dir + "inprogress_" + &count.to_string() + &".png"
         }
         celldata::CellStateData::Unit { .. } => {
             let dir = "./img/".to_string() + &cv.to_string();

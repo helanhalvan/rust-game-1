@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     celldata::{self, CellState, CellStateData, CellStateVariant},
     hexgrid::{self, Pos},
-    GameState,
+    resource, GameState,
 };
 
 // mirror of the main board (hexgrid::Board) in size
@@ -17,7 +17,7 @@ pub enum LogisticsState {
     Source,
     Available {
         locations: HashSet<hexgrid::Pos>,
-        //borrows: HashMap<Pos, Borrow>,
+        borrows: HashMap<Pos, resource::ResourcePacket>,
     },
 }
 
@@ -41,18 +41,14 @@ pub fn use_builder(pos: Pos, mut g: GameState) -> GameState {
         |_user, _target, i| match i {
             CellState {
                 variant,
-                data:
-                    CellStateData::Resource2x {
-                        left: [workers, lp],
-                        total,
-                    },
-            } => CellState {
-                variant,
-                data: CellStateData::Resource2x {
-                    left: [workers - 1, lp],
-                    total,
-                },
-            },
+                data: CellStateData::Resource { mut resources },
+            } => {
+                resources = resource::add(resource::ResouceType::Builders, resources, -1).unwrap();
+                CellState {
+                    variant,
+                    data: CellStateData::Resource { resources },
+                }
+            }
             _ => unimplemented!(),
         },
         g.matrix,
@@ -64,10 +60,10 @@ pub fn use_builder(pos: Pos, mut g: GameState) -> GameState {
 
 fn can_use(user: Pos, target: Pos, c: CellState) -> bool {
     match c.data {
-        CellStateData::Resource2x {
-            left: [workers, lp],
-            ..
-        } => (workers > 0) && (lp >= hexgrid::distance(user, target)),
+        CellStateData::Resource { resources, .. } => {
+            let cmp = resource::new_packet(1, hexgrid::distance(user, target));
+            resource::has_resources(cmp, resources)
+        }
         _ => false,
     }
 }
@@ -80,27 +76,19 @@ pub fn return_builder(pos: hexgrid::Pos, mut g: GameState) -> GameState {
         |_, _, i| match i {
             CellState {
                 variant: celldata::CellStateVariant::Hub,
-                data:
-                    CellStateData::Resource2x {
-                        left: [workers, _],
-                        total: [max_workers, _],
-                    },
-            } => workers < max_workers,
+                data: CellStateData::Resource { resources },
+            } => resource::has_capacity(resource::ResouceType::Builders, resources, 1),
             _ => false,
         },
         |_, _, i| match i {
             CellState {
                 variant,
-                data:
-                    CellStateData::Resource2x {
-                        left: [workers, lp],
-                        total,
-                    },
+                data: CellStateData::Resource { resources },
             } => CellState {
                 variant,
-                data: CellStateData::Resource2x {
-                    left: [workers + 1, lp],
-                    total,
+                data: CellStateData::Resource {
+                    resources: resource::add(resource::ResouceType::Builders, resources, 1)
+                        .unwrap(),
                 },
             },
             _ => unimplemented!(),
@@ -128,7 +116,7 @@ fn find_logistcs_node(
         Some(b)
     } else {
         match ls {
-            LogisticsState::Available { locations } => {
+            LogisticsState::Available { locations, .. } => {
                 for i in locations {
                     match find_logistcs_node(src, i, cond, update, b.clone(), b2) {
                         a @ Some(..) => {
@@ -150,7 +138,7 @@ fn find_logistcs_node(
 fn connected_sources(pos: hexgrid::Pos, g: &GameState) -> Vec<hexgrid::Pos> {
     match hexgrid::get(pos, &g.logistics_plane) {
         LogisticsState::None => vec![],
-        LogisticsState::Available { locations } => {
+        LogisticsState::Available { locations, .. } => {
             if let Some(ret) = locations
                 .into_iter()
                 .map(|i| connected_sources(i, g))
@@ -235,14 +223,18 @@ fn add_to_neighbors(
                     LogisticsState::None => {
                         let new_cell = LogisticsState::Available {
                             locations: new_subset.clone(),
+                            borrows: HashMap::new(),
                         };
                         hexgrid::set(pn, new_cell, &mut acc);
                         acc
                     }
                     LogisticsState::Source { .. } => acc,
-                    LogisticsState::Available { mut locations } => {
+                    LogisticsState::Available {
+                        mut locations,
+                        borrows,
+                    } => {
                         locations = locations.union(&new_subset).cloned().collect();
-                        let new_cell = LogisticsState::Available { locations };
+                        let new_cell = LogisticsState::Available { locations, borrows };
                         hexgrid::set(pn, new_cell, &mut acc);
                         acc
                     }

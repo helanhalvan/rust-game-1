@@ -1,7 +1,7 @@
 use core::fmt;
 use std::collections::HashMap;
 
-use crate::{actionmachine, building, hexgrid};
+use crate::{actionmachine, building, hexgrid, resource};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CellState {
@@ -21,12 +21,7 @@ pub enum CellStateData {
         on_done_data: actionmachine::OnDoneData,
     },
     Resource {
-        left: i32,
-        total: i32,
-    },
-    Resource2x {
-        left: [i32; 2],
-        total: [i32; 2],
+        resources: resource::ResourceStockpile,
     },
 }
 

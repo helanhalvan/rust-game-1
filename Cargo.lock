@@ -2309,6 +2309,7 @@ dependencies = [
  "iced",
  "iced_native",
  "image-generator",
+ "num-traits",
  "time",
 ]
 

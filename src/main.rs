@@ -3,6 +3,7 @@ pub mod building;
 pub mod celldata;
 pub mod css;
 pub mod hexgrid;
+pub mod logistics_plane;
 pub mod make_imgs;
 pub mod visualize_cell;
 
@@ -43,7 +44,7 @@ pub type WindowPos = iced_native::Point;
 #[derive(Debug, Clone)]
 pub struct GameState {
     matrix: hexgrid::Board,
-    logistics_plane: building::LogisticsPlane,
+    logistics_plane: logistics_plane::LogisticsPlane,
     resources: GameResources,
     action_machine: actionmachine::ActionMachine,
     img_buffer: visualize_cell::ImgBuffer,
@@ -94,7 +95,7 @@ impl Application for GameState {
         ];
         let mut g = GameState {
             matrix: m1,
-            logistics_plane: building::new_plane(xmax, ymax),
+            logistics_plane: logistics_plane::new_plane(xmax, ymax),
             resources: GameResources {
                 tiles: 0,
                 leak: 1,

@@ -24,6 +24,10 @@ pub enum CellStateData {
         left: i32,
         total: i32,
     },
+    Resource2x {
+        left: [i32; 2],
+        total: [i32; 2],
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

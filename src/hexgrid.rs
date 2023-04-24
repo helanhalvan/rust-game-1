@@ -1,4 +1,6 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, ops::Sub};
+
+use num_traits::Signed;
 
 use crate::celldata;
 use std::hash::Hash;
@@ -145,4 +147,24 @@ pub fn set<T>(Pos { x, y }: Pos, new_cell: T, m: &mut Hexgrid<T>) {
 
 pub fn get<T: Clone>(Pos { x, y }: Pos, m: &Hexgrid<T>) -> T {
     m[x][y].clone()
+}
+
+// is it really this easy to do distance in a hexgrid?
+pub fn distance<C: TryInto<i32>>(
+    XYCont {
+        x: from_x,
+        y: from_y,
+    }: XYCont<C>,
+    XYCont { x: to_x, y: to_y }: XYCont<C>,
+) -> i32
+where
+    <C as TryInto<i32>>::Error: std::fmt::Debug,
+{
+    let abs_y = i32::abs(from_y.try_into().unwrap() - to_y.try_into().unwrap());
+    let abs_x = i32::abs(from_x.try_into().unwrap() - to_x.try_into().unwrap());
+    if abs_x > abs_y {
+        abs_x
+    } else {
+        abs_y
+    }
 }

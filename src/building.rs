@@ -123,14 +123,6 @@ pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameS
     }
 }
 
-fn max_builders() -> i32 {
-    3
-}
-
-fn max_lp() -> i32 {
-    9
-}
-
 pub fn statespace() -> celldata::Statespace {
     let cv = celldata::CellStateVariant::Building;
     let mut to_build = has_buildtime();
@@ -146,17 +138,6 @@ pub fn statespace() -> celldata::Statespace {
                 },
             })
         }
-    }
-    let mut s0 = resource::new_stockpile(CellStateVariant::Hub, max_builders(), max_lp());
-    ret.push(s0);
-    for i in 0..max_builders() {
-        s0 = resource::add(resource::ResouceType::Builders, s0, -1).unwrap();
-        ret.push(s0);
-        for j in 0..max_lp() {
-            s0 = resource::add(resource::ResouceType::LogisticsPoints, s0, -1).unwrap();
-            ret.push(resource::new_stockpile(CellStateVariant::Hub, i, j));
-        }
-        s0 = resource::add(resource::ResouceType::LogisticsPoints, s0, max_lp()).unwrap();
     }
     ret.push(celldata::unit_state(CellStateVariant::Road));
     ret
@@ -190,11 +171,9 @@ pub fn do_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> Ga
             },
         },
         CellStateVariant::Hub => {
-            let builders = max_builders();
-            let logistics_points = max_lp();
             let new_ls_cell = LogisticsState::Source;
             hexgrid::set(pos, new_ls_cell, &mut g.logistics_plane);
-            resource::new_stockpile(cv, builders, logistics_points)
+            resource::new_hub()
         }
         _ => {
             println!("unexpected {:?}", cv);

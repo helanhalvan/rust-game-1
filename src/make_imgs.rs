@@ -3,12 +3,11 @@ use std::{collections::HashMap, fs};
 
 use cairo::Format;
 
-use cairo::{Context};
+use cairo::Context;
 
 use palette::{FromColor, Hsl, Srgb};
 
 use rand::Rng;
-
 
 use crate::celldata::{CellState, CellStateData};
 use crate::visualize_cell;
@@ -25,28 +24,6 @@ enum Icon {
     Triangle,
     OtherTriangle,
 }
-
-/*
-CellState {
-    variant: Hub,
-    data: Resource {
-        resources: [
-            ResourceData {
-                current: 9,
-                max: 9,
-            },
-            ResourceData {
-                current: 0,
-                max: 0,
-            },
-            ResourceData {
-                current: 2,
-                max: 3,
-            },
-        ],
-    },
-}
- */
 
 pub fn all_imgs() -> Vec<(celldata::CellState, String)> {
     let mut all_imgs_buff = Vec::new();
@@ -72,7 +49,7 @@ pub fn make_imgs() {
             context = set_color(context, background_color);
             context.rectangle(0., 0., f64::from(width), f64::from(height));
             let _ = context.fill();
-            context.set_line_width(1.0);
+            context.set_line_width(spacing);
             context = set_color(context, front_color);
 
             context.select_font_face(
@@ -91,13 +68,8 @@ pub fn make_imgs() {
 
             match i.data {
                 CellStateData::Unit => {
-                    // TODO nicer (possibly randomised) icon here
-                    context.move_to(spacing, top_y);
-                    context.line_to(width as f64 / 2.0, height as f64 - spacing - fontsize);
-                    context.line_to(width as f64 - spacing, top_y);
-                    context.line_to(spacing, top_y);
-                    context.close_path();
-                    let _ = context.fill();
+                    context.translate(width as f64 / 2.0, height as f64 / 2.0);
+                    context = draw_icon(context, spacing * 8.0, Icon::OtherTriangle);
                 }
                 CellStateData::InProgress { countdown, .. } => {
                     context = draw_x(context, countdown as i32, spacing * 4.0, Icon::BrokenCircle);
@@ -168,12 +140,12 @@ fn draw_x(mut context: Context, x: i32, radius: f64, icon: Icon) -> Context {
 }
 
 fn draw_icon(context: Context, radius: f64, icon: Icon) -> Context {
+    // TODO sane icon names and nice looking icons
     match icon {
         Icon::BrokenCircle => {
             context.arc(0.0, 0.0, radius, 30.0, 1.0 * std::f64::consts::PI);
         }
         Icon::Triangle => {
-            // TODO sane icon names and nice looking icons
             context.arc(0.0, 0.0, radius, 0.0, 2.0 * std::f64::consts::PI);
         }
         Icon::OtherTriangle => {

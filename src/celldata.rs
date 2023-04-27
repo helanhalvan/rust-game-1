@@ -53,6 +53,7 @@ pub fn non_interactive_statespace() -> Statespace {
     ];
     ret.append(&mut actionmachine::statespace());
     ret.append(&mut building::statespace());
+    ret.append(&mut resource::statespace());
     ret
 }
 

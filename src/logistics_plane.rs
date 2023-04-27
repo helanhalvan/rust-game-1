@@ -21,8 +21,6 @@ pub enum LogisticsState {
     },
 }
 
-//type Borrow = HashMap<ResouceType, ResourceData>;
-
 pub fn new_plane(xmax: usize, ymax: usize) -> LogisticsPlane {
     vec![vec![LogisticsState::None; xmax]; ymax]
 }
@@ -37,13 +35,15 @@ pub fn use_builder(pos: Pos, mut g: GameState) -> GameState {
     g.matrix = find_logistcs_node(
         pos,
         pos,
-        can_use,
-        |_user, _target, i| match i {
+        |src, target, i| match i {
             c @ CellState {
                 variant: CellStateVariant::Hub,
                 ..
-            } => resource::add(resource::ResouceType::Builders, c, -1).unwrap(),
-            _ => unimplemented!(),
+            } => {
+                let packet = resource::new_packet(-1, -hexgrid::distance(src, target));
+                resource::add_packet(packet, c)
+            }
+            _ => None,
         },
         g.matrix,
         &g.logistics_plane,
@@ -67,20 +67,15 @@ pub fn return_builder(pos: hexgrid::Pos, mut g: GameState) -> GameState {
     g.matrix = find_logistcs_node(
         pos,
         pos,
-        |_, _, i| match i {
-            CellState {
-                variant: celldata::CellStateVariant::Hub,
-                data: CellStateData::Resource { resources },
-            } => resource::has_capacity(resource::ResouceType::Builders, resources, 1),
-            _ => false,
-        },
-        |_, _, i| match i {
+        |src, target, i| match i {
             c @ CellState {
                 variant: CellStateVariant::Hub,
                 ..
-            } => resource::add(resource::ResouceType::Builders, c, 1).unwrap(),
-
-            _ => unimplemented!(),
+            } => {
+                let packet = resource::new_packet(1, hexgrid::distance(src, target));
+                resource::add_packet(packet, c)
+            }
+            _ => None,
         },
         g.matrix,
         &g.logistics_plane,
@@ -92,22 +87,20 @@ pub fn return_builder(pos: hexgrid::Pos, mut g: GameState) -> GameState {
 fn find_logistcs_node(
     src: Pos,
     pos: hexgrid::Pos,
-    cond: fn(Pos, Pos, CellState) -> bool,
-    update: fn(Pos, Pos, CellState) -> CellState,
+    update: fn(Pos, Pos, CellState) -> Option<CellState>,
     mut b: hexgrid::Board,
     b2: &LogisticsPlane,
 ) -> Option<hexgrid::Board> {
     let cs = hexgrid::get(pos, &b);
     let ls = hexgrid::get(pos, &b2);
-    if cond(src, pos, cs) {
-        let c1 = update(src, pos, cs);
-        hexgrid::set(pos, c1, &mut b);
+    if let Some(new) = update(src, pos, cs) {
+        hexgrid::set(pos, new, &mut b);
         Some(b)
     } else {
         match ls {
             LogisticsState::Available { locations, .. } => {
                 for i in locations {
-                    match find_logistcs_node(src, i, cond, update, b.clone(), b2) {
+                    match find_logistcs_node(src, i, update, b.clone(), b2) {
                         a @ Some(..) => {
                             return a;
                         }

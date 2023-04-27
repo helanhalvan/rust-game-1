@@ -7,14 +7,14 @@ use crate::{
 };
 use iced::{
     alignment::{Horizontal, Vertical},
-    widget::{button, container, image, row, text},
+    widget::{button, container, image, text},
 };
 use widget::Element;
 
 pub type ImgBuffer = HashMap<celldata::CellState, image::Handle>;
 
 pub fn new_img_buffer() -> ImgBuffer {
-    let ret = make_imgs::all_imgs()
+    let ret: ImgBuffer = make_imgs::all_imgs()
         .iter()
         .map(|(i, j)| (*i, image::Handle::from_path(j)))
         .collect();
@@ -36,47 +36,16 @@ pub fn to_gui<'a>(
     g: &GameState,
 ) -> Element<'a, Message> {
     let imgs: &ImgBuffer = &g.img_buffer;
-    let content = match has_image(s, imgs) {
-        Some(img) => {
-            let v: celldata::CellStateVariant = s.into();
-            crate::Element::from(iced::widget::column(vec![
-                to_text(v.to_string()),
-                crate::Element::from(image::viewer(img.clone())),
-            ]))
+    let content = if let Some((pos, _)) = hexgrid::to_pos_cell(raw_pos, &g.matrix) {
+        match building::has_actions(pos, s, g) {
+            Some(actions) => render_action_cell(actions, pos),
+            None => match has_image(s, imgs) {
+                Some(img) => crate::Element::from(image::viewer(img.clone())),
+                None => backup_formatter(s),
+            },
         }
-        None => {
-            if let Some((pos, _)) = hexgrid::to_pos_cell(raw_pos, &g.matrix) {
-                match building::has_actions(pos, s, g) {
-                    Some(actions) => {
-                        let layout = if actions.len() > 3 {
-                            to_rectangle(actions, 4, 2)
-                        } else {
-                            to_rectangle(actions, 3, 1)
-                        };
-                        let grid = layout
-                            .iter()
-                            .map(|v| {
-                                crate::Element::from(iced::widget::row(
-                                    v.into_iter()
-                                        .map(|i| {
-                                            let button_content = to_text(i.to_string());
-                                            crate::Element::from(
-                                                button(button_content)
-                                                    .on_press(Message::Build(*i, pos)),
-                                            )
-                                        })
-                                        .collect(),
-                                ))
-                            })
-                            .collect();
-                        crate::Element::from(iced::widget::column(grid))
-                    }
-                    None => backup_formatter(s),
-                }
-            } else {
-                backup_formatter(s)
-            }
-        }
+    } else {
+        backup_formatter(s)
     };
     crate::Element::from(
         container(content)
@@ -86,6 +55,33 @@ pub fn to_gui<'a>(
             .align_x(Horizontal::Center)
             .align_y(Vertical::Center),
     )
+}
+
+fn render_action_cell<'a>(
+    actions: Vec<celldata::CellStateVariant>,
+    pos: hexgrid::Pos,
+) -> Element<'a, Message> {
+    let layout = if actions.len() > 3 {
+        to_rectangle(actions, 4, 2)
+    } else {
+        to_rectangle(actions, 3, 1)
+    };
+    let grid = layout
+        .iter()
+        .map(|v| {
+            crate::Element::from(iced::widget::row(
+                v.into_iter()
+                    .map(|i| {
+                        let button_content = to_text(i.to_string());
+                        crate::Element::from(
+                            button(button_content).on_press(Message::Build(*i, pos)),
+                        )
+                    })
+                    .collect(),
+            ))
+        })
+        .collect();
+    crate::Element::from(iced::widget::column(grid))
 }
 
 fn backup_formatter<'a>(s: celldata::CellState) -> Element<'a, Message> {

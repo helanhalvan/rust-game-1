@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use crate::celldata;
+use enum_iterator::Sequence;
+
 use crate::celldata::CellState;
 use crate::celldata::CellStateData;
 use crate::celldata::CellStateVariant;
@@ -8,14 +9,13 @@ use crate::celldata::CellStateVariant;
 type ResourceValue = i32;
 pub type ResourceStockpile = ResourceContainer<ResourceData>;
 pub type ResourcePacket = ResourceContainer<ResourceValue>;
-pub type ResourceContainer<T> = [T; ResouceType::Last as usize];
+pub type ResourceContainer<T> = [T; ResouceType::CARDINALITY as usize];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Sequence)]
 pub enum ResouceType {
     LogisticsPoints,
     Wood,
     Builders,
-    Last,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -50,30 +50,52 @@ pub fn has_capacity(t: ResouceType, r: ResourceStockpile, min_capacity: i32) -> 
 }
 
 pub fn has_resources(req: ResourcePacket, r: ResourceStockpile) -> bool {
-    all_resourcetypes().all(|i| req[i] <= r[i].current)
+    all_resourcetypes().all(|i| req[i as usize] <= r[i as usize].current)
 }
 
-pub fn add(t: ResouceType, mut r: ResourceStockpile, to_add: i32) -> Option<ResourceStockpile> {
-    if has_capacity(t, r, to_add) {
-        r[t as usize].current = r[t as usize].current + to_add;
-        Some(r)
-    } else {
-        None
+pub fn add(t: ResouceType, c: CellState, to_add: i32) -> Option<CellState> {
+    match c {
+        CellState {
+            variant,
+            data: CellStateData::Resource { mut resources },
+        } => {
+            if has_capacity(t, resources, to_add) {
+                resources[t as usize].current = resources[t as usize].current + to_add;
+                Some(CellState {
+                    variant,
+                    data: CellStateData::Resource { resources },
+                })
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
 }
 
-fn all_resourcetypes() -> std::ops::Range<usize> {
-    0..ResouceType::Last as usize
+pub fn to_key_value(r: ResourceStockpile) -> HashMap<ResouceType, i32> {
+    let mut ret = HashMap::new();
+    for i in all_resourcetypes() {
+        let value = get(i, r);
+        if value > 0 {
+            ret.insert(i, value);
+        }
+    }
+    ret
+}
+
+fn all_resourcetypes() -> impl Iterator<Item = ResouceType> {
+    enum_iterator::all::<ResouceType>()
 }
 
 fn empty_packet() -> ResourcePacket {
     let nothing = 0;
-    [nothing; ResouceType::Last as usize]
+    [nothing; ResouceType::CARDINALITY as usize]
 }
 
 fn empty_stockpile() -> ResourceStockpile {
     let nothing = ResourceData { current: 0, max: 0 };
-    [nothing; ResouceType::Last as usize]
+    [nothing; ResouceType::CARDINALITY as usize]
 }
 
 fn set_to_full(t: ResouceType, new: i32, r: ResourceStockpile) -> ResourceStockpile {

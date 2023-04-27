@@ -1,10 +1,8 @@
-use std::collections::HashSet;
-
 use crate::{
     actionmachine,
-    celldata::{self, CellState, CellStateData, CellStateVariant},
+    celldata::{self, CellState, CellStateVariant},
     hexgrid::{self},
-    logistics_plane::{self, LogisticsPlane, LogisticsState},
+    logistics_plane::{self, LogisticsState},
     resource, GameState,
 };
 
@@ -149,10 +147,16 @@ pub fn statespace() -> celldata::Statespace {
             })
         }
     }
-    for i in 0..max_builders() + 1 {
+    let mut s0 = resource::new_stockpile(CellStateVariant::Hub, max_builders(), max_lp());
+    ret.push(s0);
+    for i in 0..max_builders() {
+        s0 = resource::add(resource::ResouceType::Builders, s0, -1).unwrap();
+        ret.push(s0);
         for j in 0..max_lp() {
-            ret.push(resource::new_stockpile(CellStateVariant::Hub, i, j))
+            s0 = resource::add(resource::ResouceType::LogisticsPoints, s0, -1).unwrap();
+            ret.push(resource::new_stockpile(CellStateVariant::Hub, i, j));
         }
+        s0 = resource::add(resource::ResouceType::LogisticsPoints, s0, max_lp()).unwrap();
     }
     ret.push(celldata::unit_state(CellStateVariant::Road));
     ret
@@ -172,20 +176,20 @@ pub fn do_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> Ga
         | CellStateVariant::Unused
         | CellStateVariant::Seller
         | CellStateVariant::Road) => celldata::unit_state(a),
-        a @ CellStateVariant::Hot => CellState {
-            variant: a,
+        CellStateVariant::Hot => CellState {
+            variant: cv,
             data: celldata::CellStateData::Slot {
                 slot: celldata::Slot::Empty,
             },
         },
-        a @ CellStateVariant::WoodCutter => CellState {
-            variant: a,
+        CellStateVariant::WoodCutter => CellState {
+            variant: cv,
             data: celldata::CellStateData::InProgress {
                 countdown: 3,
                 on_done_data: actionmachine::OnDoneData::Nothing,
             },
         },
-        a @ CellStateVariant::Hub => {
+        CellStateVariant::Hub => {
             let builders = max_builders();
             let logistics_points = max_lp();
             let new_ls_cell = LogisticsState::Source;

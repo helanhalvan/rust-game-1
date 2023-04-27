@@ -39,16 +39,10 @@ pub fn use_builder(pos: Pos, mut g: GameState) -> GameState {
         pos,
         can_use,
         |_user, _target, i| match i {
-            CellState {
-                variant,
-                data: CellStateData::Resource { mut resources },
-            } => {
-                resources = resource::add(resource::ResouceType::Builders, resources, -1).unwrap();
-                CellState {
-                    variant,
-                    data: CellStateData::Resource { resources },
-                }
-            }
+            c @ CellState {
+                variant: CellStateVariant::Hub,
+                ..
+            } => resource::add(resource::ResouceType::Builders, c, -1).unwrap(),
             _ => unimplemented!(),
         },
         g.matrix,
@@ -81,16 +75,11 @@ pub fn return_builder(pos: hexgrid::Pos, mut g: GameState) -> GameState {
             _ => false,
         },
         |_, _, i| match i {
-            CellState {
-                variant,
-                data: CellStateData::Resource { resources },
-            } => CellState {
-                variant,
-                data: CellStateData::Resource {
-                    resources: resource::add(resource::ResouceType::Builders, resources, 1)
-                        .unwrap(),
-                },
-            },
+            c @ CellState {
+                variant: CellStateVariant::Hub,
+                ..
+            } => resource::add(resource::ResouceType::Builders, c, 1).unwrap(),
+
             _ => unimplemented!(),
         },
         g.matrix,

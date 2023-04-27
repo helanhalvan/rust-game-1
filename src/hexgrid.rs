@@ -1,6 +1,4 @@
-use std::{collections::HashSet, ops::Sub};
-
-use num_traits::Signed;
+use std::{collections::HashSet};
 
 use crate::celldata;
 use std::hash::Hash;

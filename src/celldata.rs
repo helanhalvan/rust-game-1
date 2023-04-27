@@ -41,6 +41,7 @@ pub fn non_interactive_statespace() -> Statespace {
         unit_state(CellStateVariant::Insulation),
         unit_state(CellStateVariant::Feeder),
         unit_state(CellStateVariant::Seller),
+        unit_state(CellStateVariant::Hidden),
         CellState {
             variant: CellStateVariant::Hot,
             data: CellStateData::Slot { slot: Slot::Empty },

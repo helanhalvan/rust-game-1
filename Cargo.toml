@@ -9,5 +9,8 @@ edition = "2021"
 num-traits = "0.2"
 iced =  { version = "0.9.0", features = ["image", "tokio", "debug"] }
 time = { version = "0.3.20", features = ["local-offset"] }
-image-generator = { git = "https://github.com/helanhalvan/image-generator.git", branch = "master" }
 iced_native = "0.10.3"
+cairo-rs = { version = "0.17.0", features = [ "png" ] }
+palette = "0.7.1"
+rand = "0.8.5"
+enum-iterator = "1.4.0"

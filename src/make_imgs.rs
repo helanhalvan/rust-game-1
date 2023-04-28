@@ -5,6 +5,7 @@ use cairo::Format;
 
 use cairo::Context;
 
+use itertools::Itertools;
 use palette::{FromColor, Hsl, Srgb};
 
 use rand::Rng;
@@ -69,10 +70,10 @@ pub fn make_imgs() {
             match i.data {
                 CellStateData::Unit => {
                     context.translate(width as f64 / 2.0, height as f64 / 2.0);
-                    context = draw_icon(context, spacing * 8.0, Icon::OtherTriangle);
+                    draw_icon(context, spacing * 8.0, Icon::OtherTriangle);
                 }
                 CellStateData::InProgress { countdown, .. } => {
-                    context = draw_x(context, countdown as i32, spacing * 4.0, Icon::BrokenCircle);
+                    draw_x(context, countdown as i32, spacing * 4.0, Icon::BrokenCircle);
                 }
                 CellStateData::Slot {
                     slot: celldata::Slot::Done,
@@ -114,7 +115,7 @@ pub fn make_imgs() {
 
                     match map.get(&resource::ResourceType::Wood) {
                         Some(value) => {
-                            context = draw_x(context, *value, spacing * 2.0, Icon::OtherTriangle)
+                            draw_x(context, *value, spacing * 2.0, Icon::OtherTriangle);
                         }
                         None => {}
                     }
@@ -224,14 +225,13 @@ fn make_path(cellstate: celldata::CellState) -> String {
             (dir.clone(), dir + &countdown.to_string() + &".png")
         }
         celldata::CellStateData::Resource { resources: r, .. } => {
-            let b = resource::get(resource::ResourceType::Builders, r);
-            let lp = resource::get(resource::ResourceType::LogisticsPoints, r);
-            let w = resource::get(resource::ResourceType::Wood, r);
+            let name = resource::to_key_value(r)
+                .into_iter()
+                .sorted()
+                .map(|(t, v)| format!("{:?}", t) + ":" + &v.to_string())
+                .join("_");
             let dir = base + &cv.to_string() + "/resource/";
-            (
-                dir.clone(),
-                dir + &b.to_string() + ":" + &lp.to_string() + ":" + &w.to_string() + &".png",
-            )
+            (dir.clone(), dir + "a_" + &name + &".png")
         }
         celldata::CellStateData::Unit { .. } => {
             let dir = base + &cv.to_string() + "/unit/";

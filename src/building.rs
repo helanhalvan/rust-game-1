@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     actionmachine,
     celldata::{self, CellState, CellStateVariant},
@@ -73,10 +75,12 @@ pub fn explore_able() -> Vec<CellStateVariant> {
 }
 
 fn has_buildtime() -> Vec<CellStateVariant> {
-    let mut ret = industry();
-    ret.append(&mut infrastructure());
-    ret.append(&mut extract());
-    ret
+    enum_iterator::all::<CellStateVariant>()
+        .filter(|i| match buildtime(*i) {
+            None => false,
+            Some(_) => true,
+        })
+        .collect()
 }
 
 fn buildtime(cv: CellStateVariant) -> Option<actionmachine::InProgressWait> {
@@ -88,7 +92,16 @@ fn buildtime(cv: CellStateVariant) -> Option<actionmachine::InProgressWait> {
         CellStateVariant::Insulation => Some(2),
         CellStateVariant::WoodCutter => Some(3),
         CellStateVariant::Road => Some(1),
-        CellStateVariant::Hub => Some(10),
+        _ => None,
+    }
+}
+
+fn buildcost(cv: CellStateVariant) -> Option<CellState> {
+    match cv {
+        CellStateVariant::Hub => Some(resource::new_stockpile(
+            CellStateVariant::Building,
+            HashMap::from([(resource::ResourceType::Builders, 1)]),
+        )),
         _ => None,
     }
 }
@@ -118,8 +131,14 @@ pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameS
         g.action_machine =
             actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
         g
+    } else if let Some(new_cell) = buildcost(cv) {
+        hexgrid::set(pos, new_cell, &mut g.matrix);
+        g = logistics_plane::use_builder(pos, g);
+        g.action_machine =
+            actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
+        g
     } else {
-        unimplemented!("{:?}", (cv, pos, g))
+        unimplemented!("{:?}", (g, cv, pos))
     }
 }
 

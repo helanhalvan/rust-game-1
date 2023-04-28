@@ -1,6 +1,8 @@
 use core::fmt;
 use std::collections::HashMap;
 
+use enum_iterator::Sequence;
+
 use crate::{actionmachine, building, hexgrid, resource};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -65,7 +67,7 @@ pub fn unit_state(cv: CellStateVariant) -> CellState {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Sequence)]
 pub enum CellStateVariant {
     Hidden,
     Unused,

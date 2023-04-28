@@ -8,39 +8,58 @@ use crate::celldata::CellStateData;
 use crate::celldata::CellStateVariant;
 use itertools::Itertools;
 
-type ResourceValue = i32;
+pub type ResourceValue = i32;
 pub type ResourceStockpile = ResourceContainer<ResourceData>;
 pub type ResourcePacket = ResourceContainer<ResourceValue>;
 pub type ResourceContainer<T> = [T; ResourceType::CARDINALITY as usize];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Sequence)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Hash, Sequence)]
 pub enum ResourceType {
     LogisticsPoints = 0,
     Wood,
     Builders,
+    BuildTime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ResourceData {
-    current: ResourceValue,
-    max: ResourceValue,
+    pub current: ResourceValue,
+    pub max: ResourceValue,
 }
 
 pub fn new_hub() -> CellState {
-    let mut r: ResourceStockpile = empty_stockpile();
-    r = set_to_full(ResourceType::Builders, max(ResourceType::Builders), r);
-    r = set_to_empty(ResourceType::Wood, max(ResourceType::Wood), r);
+    let cv = CellStateVariant::Hub;
+    let mut r: ResourceStockpile = empty_stockpile(cv);
+    r = set_to_full(ResourceType::Builders, max(cv, ResourceType::Builders), r);
+    r = set_to_empty(ResourceType::Wood, max(cv, ResourceType::Wood), r);
     r = set_to_full(
         ResourceType::LogisticsPoints,
-        max(ResourceType::LogisticsPoints),
+        max(cv, ResourceType::LogisticsPoints),
         r,
     );
-    stockpile_to_cell(r)
+    stockpile_to_cell(CellStateVariant::Hub, r)
 }
 
-fn stockpile_to_cell(s: ResourceStockpile) -> CellState {
+pub fn new_stockpile(
+    cv: CellStateVariant,
+    data: HashMap<ResourceType, ResourceValue>,
+) -> CellState {
+    let stockpile = data.into_iter().fold(empty_stockpile(cv), |acc, (t, d)| {
+        set(
+            t,
+            ResourceData {
+                current: d,
+                max: max(cv, t),
+            },
+            acc,
+        )
+    });
+    stockpile_to_cell(cv, stockpile)
+}
+
+fn stockpile_to_cell(cv: CellStateVariant, s: ResourceStockpile) -> CellState {
     CellState {
-        variant: CellStateVariant::Hub,
+        variant: cv,
         data: CellStateData::Resource { resources: s },
     }
 }
@@ -88,11 +107,11 @@ pub fn add_to_packet(t: ResourceType, to_add: i32, mut p: ResourcePacket) -> Res
 pub fn add_packet(p: ResourcePacket, c: CellState) -> Option<CellState> {
     match c {
         CellState {
-            variant: CellStateVariant::Hub,
+            variant: cv,
             data: CellStateData::Resource { resources },
         } => {
             if let Some(s) = add_packet_stockpile(p, resources) {
-                Some(stockpile_to_cell(s))
+                Some(stockpile_to_cell(cv, s))
             } else {
                 None
             }
@@ -134,33 +153,43 @@ fn add_packet_stockpile(p: ResourcePacket, mut s: ResourceStockpile) -> Option<R
     return Some(s);
 }
 
-fn max(t: ResourceType) -> i32 {
-    match t {
-        ResourceType::LogisticsPoints => 9,
-        ResourceType::Wood => 100,
-        ResourceType::Builders => 3,
+fn resource_variants() -> Vec<CellStateVariant> {
+    vec![CellStateVariant::Hub, CellStateVariant::Building]
+}
+
+fn max(cv: CellStateVariant, t: ResourceType) -> i32 {
+    match (cv, t) {
+        (CellStateVariant::Hub, ResourceType::LogisticsPoints) => 9,
+        (CellStateVariant::Hub, ResourceType::Wood) => 1,
+        (CellStateVariant::Hub, ResourceType::Builders) => 3,
+        (CellStateVariant::Building, ResourceType::BuildTime) => 10,
+        (CellStateVariant::Building, ResourceType::Wood) => 1,
+        (CellStateVariant::Building, ResourceType::Builders) => 2,
+        _ => 0,
     }
 }
 
 pub fn statespace() -> celldata::Statespace {
     let mut ret = vec![];
-    let resource_space: Vec<_> = all_resourcetypes()
-        .map(|i| 0..(max(i) + 1))
-        .multi_cartesian_product()
-        .collect();
-    for s in resource_space {
-        let mut s0 = empty_stockpile();
-        for t in all_resourcetypes() {
-            s0 = set(
-                t,
-                ResourceData {
-                    max: max(t),
-                    current: s[t as usize],
-                },
-                s0,
-            );
+    for cv in resource_variants() {
+        let resource_space: Vec<_> = all_resourcetypes()
+            .map(|i| 0..(max(cv, i) + 1))
+            .multi_cartesian_product()
+            .collect();
+        for s in resource_space {
+            let mut s0 = empty_stockpile(cv);
+            for t in all_resourcetypes() {
+                s0 = set(
+                    t,
+                    ResourceData {
+                        max: max(cv, t),
+                        current: s[t as usize],
+                    },
+                    s0,
+                );
+            }
+            ret.push(stockpile_to_cell(cv, s0));
         }
-        ret.push(stockpile_to_cell(s0));
     }
     dbg!(ret.clone());
     ret
@@ -175,9 +204,13 @@ pub fn empty_packet() -> ResourcePacket {
     [nothing; ResourceType::CARDINALITY as usize]
 }
 
-fn empty_stockpile() -> ResourceStockpile {
+fn empty_stockpile(cv: CellStateVariant) -> ResourceStockpile {
     let nothing = ResourceData { current: 0, max: 0 };
-    [nothing; ResourceType::CARDINALITY as usize]
+    let mut ret = [nothing; ResourceType::CARDINALITY as usize];
+    for i in all_resourcetypes() {
+        ret[i as usize].max = max(cv, i);
+    }
+    ret
 }
 
 fn set_to_empty(t: ResourceType, new: i32, r: ResourceStockpile) -> ResourceStockpile {

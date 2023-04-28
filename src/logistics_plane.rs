@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    celldata::{self, CellState, CellStateData, CellStateVariant},
+    celldata::{CellState, CellStateData, CellStateVariant},
     hexgrid::{self, Pos},
     resource, GameState,
 };
@@ -18,6 +18,7 @@ pub enum LogisticsState {
     Available {
         locations: HashSet<hexgrid::Pos>,
         borrows: HashMap<Pos, resource::ResourcePacket>,
+        //taken_lp: HashMap<Pos, resource::ResourceValue>,
     },
 }
 

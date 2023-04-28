@@ -9,7 +9,6 @@ use iced::{
     alignment::{Horizontal, Vertical},
     widget::{button, container, image, text},
 };
-use iced_native::widget::row;
 use widget::Element;
 
 pub type ImgBuffer = HashMap<celldata::CellState, image::Handle>;
@@ -17,7 +16,13 @@ pub type ImgBuffer = HashMap<celldata::CellState, image::Handle>;
 pub fn new_img_buffer() -> ImgBuffer {
     let ret: ImgBuffer = make_imgs::all_imgs()
         .iter()
-        .map(|(i, j)| (*i, image::Handle::from_path(j)))
+        .map(|(i, j)| {
+            if std::path::Path::new(j).exists() {
+                (*i, image::Handle::from_path(j))
+            } else {
+                unreachable!("{:?}", (i, j))
+            }
+        })
         .collect();
     return ret;
 }

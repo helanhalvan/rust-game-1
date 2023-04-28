@@ -87,7 +87,7 @@ fn try_borrow_resources(
             vec.sort_by(|(a, _), (b, _)| a.cmp(b));
             for (distance, target) in vec {
                 let p1 =
-                    resource::add_to_packet(resource::ResouceType::LogisticsPoints, -distance, p);
+                    resource::add_to_packet(resource::ResourceType::LogisticsPoints, -distance, p);
                 let target_cell = hexgrid::get(*target, &g.matrix);
                 if let Some(new) = resource::add_packet(p1, target_cell) {
                     hexgrid::set(*target, new, &mut g.matrix);

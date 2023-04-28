@@ -6,15 +6,16 @@ use crate::celldata;
 use crate::celldata::CellState;
 use crate::celldata::CellStateData;
 use crate::celldata::CellStateVariant;
+use itertools::Itertools;
 
 type ResourceValue = i32;
 pub type ResourceStockpile = ResourceContainer<ResourceData>;
 pub type ResourcePacket = ResourceContainer<ResourceValue>;
-pub type ResourceContainer<T> = [T; ResouceType::CARDINALITY as usize];
+pub type ResourceContainer<T> = [T; ResourceType::CARDINALITY as usize];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Sequence)]
-pub enum ResouceType {
-    LogisticsPoints,
+pub enum ResourceType {
+    LogisticsPoints = 0,
     Wood,
     Builders,
 }
@@ -26,13 +27,14 @@ pub struct ResourceData {
 }
 
 pub fn new_hub() -> CellState {
-    new_stockpile(max_builders(), max_lp())
-}
-
-fn new_stockpile(b: i32, lp: i32) -> CellState {
     let mut r: ResourceStockpile = empty_stockpile();
-    r = set_to_full(ResouceType::Builders, b, r);
-    r = set_to_full(ResouceType::LogisticsPoints, lp, r);
+    r = set_to_full(ResourceType::Builders, max(ResourceType::Builders), r);
+    r = set_to_empty(ResourceType::Wood, max(ResourceType::Wood), r);
+    r = set_to_full(
+        ResourceType::LogisticsPoints,
+        max(ResourceType::LogisticsPoints),
+        r,
+    );
     stockpile_to_cell(r)
 }
 
@@ -45,15 +47,15 @@ fn stockpile_to_cell(s: ResourceStockpile) -> CellState {
 
 pub fn new_packet(builders: i32, lp: i32) -> ResourcePacket {
     let mut ret = empty_packet();
-    ret = set(ResouceType::Builders, builders, ret);
-    ret = set(ResouceType::LogisticsPoints, lp, ret);
+    ret = set(ResourceType::Builders, builders, ret);
+    ret = set(ResourceType::LogisticsPoints, lp, ret);
     ret
 }
 
-pub fn get(t: ResouceType, r: ResourceStockpile) -> i32 {
+pub fn get(t: ResourceType, r: ResourceStockpile) -> i32 {
     r[t as usize].current
 }
-pub fn has_capacity(t: ResouceType, r: ResourceStockpile, min_capacity: i32) -> bool {
+pub fn has_capacity(t: ResourceType, r: ResourceStockpile, min_capacity: i32) -> bool {
     let new_value = r[t as usize].current + min_capacity;
     new_value <= r[t as usize].max && new_value >= 0
 }
@@ -78,7 +80,7 @@ pub fn neg_packet(mut p1: ResourcePacket) -> ResourcePacket {
     p1
 }
 
-pub fn add_to_packet(t: ResouceType, to_add: i32, mut p: ResourcePacket) -> ResourcePacket {
+pub fn add_to_packet(t: ResourceType, to_add: i32, mut p: ResourcePacket) -> ResourcePacket {
     p[t as usize] = p[t as usize] + to_add;
     p
 }
@@ -99,13 +101,13 @@ pub fn add_packet(p: ResourcePacket, c: CellState) -> Option<CellState> {
     }
 }
 
-pub fn add(t: ResouceType, c: CellState, to_add: i32) -> Option<CellState> {
+pub fn add(t: ResourceType, c: CellState, to_add: i32) -> Option<CellState> {
     let mut p = empty_packet();
     p = set(t, to_add, p);
     add_packet(p, c)
 }
 
-pub fn to_key_value(r: ResourceStockpile) -> HashMap<ResouceType, i32> {
+pub fn to_key_value(r: ResourceStockpile) -> HashMap<ResourceType, i32> {
     let mut ret = HashMap::new();
     for i in all_resourcetypes() {
         let value = get(i, r);
@@ -132,44 +134,61 @@ fn add_packet_stockpile(p: ResourcePacket, mut s: ResourceStockpile) -> Option<R
     return Some(s);
 }
 
-fn max_builders() -> i32 {
-    3
-}
-
-fn max_lp() -> i32 {
-    9
+fn max(t: ResourceType) -> i32 {
+    match t {
+        ResourceType::LogisticsPoints => 9,
+        ResourceType::Wood => 100,
+        ResourceType::Builders => 3,
+    }
 }
 
 pub fn statespace() -> celldata::Statespace {
     let mut ret = vec![];
-    let mut s0 = new_stockpile(max_builders(), max_lp());
-    ret.push(s0);
-    for _ in 0..max_builders() {
-        s0 = add(ResouceType::Builders, s0, -1).unwrap();
-        for _ in 0..max_lp() {
-            s0 = add(ResouceType::LogisticsPoints, s0, -1).unwrap();
-            ret.push(s0);
+    let resource_space: Vec<_> = all_resourcetypes()
+        .map(|i| 0..(max(i) + 1))
+        .multi_cartesian_product()
+        .collect();
+    for s in resource_space {
+        let mut s0 = empty_stockpile();
+        for t in all_resourcetypes() {
+            s0 = set(
+                t,
+                ResourceData {
+                    max: max(t),
+                    current: s[t as usize],
+                },
+                s0,
+            );
         }
-        s0 = add(ResouceType::LogisticsPoints, s0, max_lp()).unwrap();
+        ret.push(stockpile_to_cell(s0));
     }
+    dbg!(ret.clone());
     ret
 }
 
-fn all_resourcetypes() -> impl Iterator<Item = ResouceType> {
-    enum_iterator::all::<ResouceType>()
+fn all_resourcetypes() -> impl Iterator<Item = ResourceType> {
+    enum_iterator::all::<ResourceType>()
 }
 
 pub fn empty_packet() -> ResourcePacket {
     let nothing = 0;
-    [nothing; ResouceType::CARDINALITY as usize]
+    [nothing; ResourceType::CARDINALITY as usize]
 }
 
 fn empty_stockpile() -> ResourceStockpile {
     let nothing = ResourceData { current: 0, max: 0 };
-    [nothing; ResouceType::CARDINALITY as usize]
+    [nothing; ResourceType::CARDINALITY as usize]
 }
 
-fn set_to_full(t: ResouceType, new: i32, r: ResourceStockpile) -> ResourceStockpile {
+fn set_to_empty(t: ResourceType, new: i32, r: ResourceStockpile) -> ResourceStockpile {
+    let new = ResourceData {
+        current: 0,
+        max: new,
+    };
+    set(t, new, r)
+}
+
+fn set_to_full(t: ResourceType, new: i32, r: ResourceStockpile) -> ResourceStockpile {
     let new = ResourceData {
         current: new,
         max: new,
@@ -177,7 +196,7 @@ fn set_to_full(t: ResouceType, new: i32, r: ResourceStockpile) -> ResourceStockp
     set(t, new, r)
 }
 
-fn set<I>(t: ResouceType, new: I, mut r: ResourceContainer<I>) -> ResourceContainer<I> {
+fn set<I>(t: ResourceType, new: I, mut r: ResourceContainer<I>) -> ResourceContainer<I> {
     r[t as usize] = new;
     r
 }

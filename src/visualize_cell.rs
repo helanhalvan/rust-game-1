@@ -86,7 +86,7 @@ fn render_action_cell<'a>(
 }
 
 fn backup_formatter<'a>(s: celldata::CellState) -> Element<'a, Message> {
-    //dbg!(s);
+    dbg!(s);
     match s.data {
         celldata::CellStateData::Unit => to_text(format!("{:?}", s.variant).to_string()),
         _ => to_text(format!("{:?}", s).to_string()),

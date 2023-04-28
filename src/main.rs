@@ -136,6 +136,9 @@ impl Application for GameState {
         };
         let cv = celldata::CellStateVariant::Hub;
         g = building::do_build(cv, p, g);
+        let mut start_hub = hexgrid::get(p, &g.matrix);
+        start_hub = resource::add(resource::ResourceType::Wood, start_hub, 100).unwrap();
+        hexgrid::set(p, start_hub, &mut g.matrix);
         (g, Command::none())
     }
 

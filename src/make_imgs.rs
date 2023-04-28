@@ -96,19 +96,26 @@ pub fn make_imgs() {
                 }
                 CellStateData::Resource { resources } => {
                     let map = resource::to_key_value(resources);
-                    match map.get(&resource::ResouceType::Builders) {
+                    let number_of_resources = map.keys().count() as f64;
+                    match map.get(&resource::ResourceType::Builders) {
                         Some(value) => {
-                            context = draw_x(context, *value, spacing * 2.0, Icon::BrokenCircle)
+                            context = draw_x(context, *value, spacing * 2.0, Icon::BrokenCircle);
+                            context.translate(width as f64 / number_of_resources, 0.0)
                         }
-
                         None => {}
                     };
-                    context.translate(width as f64 / 2.0, 0.0);
-                    match map.get(&resource::ResouceType::LogisticsPoints) {
+                    match map.get(&resource::ResourceType::LogisticsPoints) {
                         Some(value) => {
-                            context = draw_x(context, *value, spacing * 2.0, Icon::Triangle)
+                            context = draw_x(context, *value, spacing * 2.0, Icon::Triangle);
+                            context.translate(width as f64 / number_of_resources, 0.0)
                         }
+                        None => {}
+                    }
 
+                    match map.get(&resource::ResourceType::Wood) {
+                        Some(value) => {
+                            context = draw_x(context, *value, spacing * 2.0, Icon::OtherTriangle)
+                        }
                         None => {}
                     }
                 }
@@ -116,7 +123,7 @@ pub fn make_imgs() {
 
             let mut file = File::create(&path).expect("Couldn't create 'file.png'");
             match surface.write_to_png(&mut file) {
-                Ok(_) => println!("{}, created", path),
+                Ok(_) => print!("."),
                 Err(_) => println!("Error create file.png"),
             }
         }
@@ -124,10 +131,14 @@ pub fn make_imgs() {
 }
 
 fn draw_x(mut context: Context, x: i32, radius: f64, icon: Icon) -> Context {
+    let row_length = 3;
     let _ = context.save();
     let size = radius * 2.5;
     context.translate(size, size);
-    let row_length = 4;
+    if x > (row_length * 6) {
+        let _ = context.show_text(&x.to_string());
+        return context;
+    }
     for j in 0..x {
         if (j % row_length == 0) && (j != 0) {
             context.translate(row_length as f64 * -size, size);
@@ -213,12 +224,13 @@ fn make_path(cellstate: celldata::CellState) -> String {
             (dir.clone(), dir + &countdown.to_string() + &".png")
         }
         celldata::CellStateData::Resource { resources: r, .. } => {
-            let b = resource::get(resource::ResouceType::Builders, r);
-            let lp = resource::get(resource::ResouceType::LogisticsPoints, r);
+            let b = resource::get(resource::ResourceType::Builders, r);
+            let lp = resource::get(resource::ResourceType::LogisticsPoints, r);
+            let w = resource::get(resource::ResourceType::Wood, r);
             let dir = base + &cv.to_string() + "/resource/";
             (
                 dir.clone(),
-                dir + &b.to_string() + ":" + &lp.to_string() + &".png",
+                dir + &b.to_string() + ":" + &lp.to_string() + ":" + &w.to_string() + &".png",
             )
         }
         celldata::CellStateData::Unit { .. } => {

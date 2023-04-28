@@ -62,6 +62,27 @@ pub fn has_resources(req: ResourcePacket, r: ResourceStockpile) -> bool {
     all_resourcetypes().all(|i| req[i as usize] <= r[i as usize].current)
 }
 
+pub fn add_packet_to_packet(mut p1: ResourcePacket, p2: ResourcePacket) -> ResourcePacket {
+    for index in all_resourcetypes() {
+        let i = index as usize;
+        p1[i] = p1[i] + p2[i]
+    }
+    p1
+}
+
+pub fn neg_packet(mut p1: ResourcePacket) -> ResourcePacket {
+    for index in all_resourcetypes() {
+        let i = index as usize;
+        p1[i] = p1[i] * -1;
+    }
+    p1
+}
+
+pub fn add_to_packet(t: ResouceType, to_add: i32, mut p: ResourcePacket) -> ResourcePacket {
+    p[t as usize] = p[t as usize] + to_add;
+    p
+}
+
 pub fn add_packet(p: ResourcePacket, c: CellState) -> Option<CellState> {
     match c {
         CellState {
@@ -138,7 +159,7 @@ fn all_resourcetypes() -> impl Iterator<Item = ResouceType> {
     enum_iterator::all::<ResouceType>()
 }
 
-fn empty_packet() -> ResourcePacket {
+pub fn empty_packet() -> ResourcePacket {
     let nothing = 0;
     [nothing; ResouceType::CARDINALITY as usize]
 }

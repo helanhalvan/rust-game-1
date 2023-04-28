@@ -144,7 +144,7 @@ pub fn statespace() -> celldata::Statespace {
 }
 
 pub fn finalize_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameState {
-    g = logistics_plane::return_builder(pos, g);
+    g = logistics_plane::return_borrows(pos, g);
     do_build(cv, pos, g)
 }
 

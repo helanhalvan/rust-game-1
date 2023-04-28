@@ -9,6 +9,7 @@ use iced::{
     alignment::{Horizontal, Vertical},
     widget::{button, container, image, text},
 };
+use iced_native::widget::row;
 use widget::Element;
 
 pub type ImgBuffer = HashMap<celldata::CellState, image::Handle>;

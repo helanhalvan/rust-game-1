@@ -1,9 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     building,
     celldata::{self, CellState, CellStateData, CellStateVariant},
-    hexgrid, resource, GameState,
+    hexgrid, logistics_plane, resource, GameState,
 };
 
 //crontab but for game triggers
@@ -139,9 +139,13 @@ fn do_in_progress(
 fn do_pure_progress_done(p: hexgrid::Pos, cv: CellStateVariant, mut g: GameState) -> GameState {
     match cv {
         celldata::CellStateVariant::WoodCutter => {
-            g.resources.wood = g.resources.wood + 1;
-            let new_cell = new_in_progress(cv, in_progress_max(cv));
-            hexgrid::set(p, new_cell, &mut g.matrix);
+            let packet =
+                resource::from_key_value(HashMap::from([(resource::ResourceType::Wood, -10)]));
+            if let Some(g1) = logistics_plane::try_take_resources(p, packet, &mut g) {
+                g = g1;
+                let new_cell = new_in_progress(cv, in_progress_max(cv));
+                hexgrid::set(p, new_cell, &mut g.matrix);
+            }
             g
         }
         celldata::CellStateVariant::Hot => {
@@ -260,7 +264,7 @@ fn do_tick(p: hexgrid::Pos, c: celldata::CellState, mut g: GameState) -> GameSta
                         },
                     };
                     hexgrid::set(*hp, new_cell, &mut g.matrix);
-                    g.resources.wood = g.resources.wood + 40;
+                    // TODO selling should make gold or something
                 }
                 _ => {}
             }
@@ -283,7 +287,6 @@ fn do_tick(p: hexgrid::Pos, c: celldata::CellState, mut g: GameState) -> GameSta
 }
 
 pub fn run(mut g: GameState) -> GameState {
-    g.resources.wood = g.resources.wood - g.resources.leak;
     let old_acton_machine = g.action_machine.clone();
     for v in old_acton_machine {
         g = v.into_iter().fold(g, |acc, pos| {

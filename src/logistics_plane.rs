@@ -113,10 +113,11 @@ fn get_available(src: Pos, g: &mut GameState) -> Available {
 
 fn try_resources(
     src: Pos,
-    p: resource::ResourcePacket,
+    mut p: resource::ResourcePacket,
     is_borrow: bool,
     g: &mut GameState,
 ) -> Option<GameState> {
+    p = resource::neg_packet(p);
     let a = get_available(src, g);
     let mut vec: Vec<_> = a
         .locations

@@ -108,14 +108,14 @@ fn buildcost_cell(cv: CellStateVariant) -> Option<CellState> {
 }
 
 pub fn required_per_build_action(_cv: CellStateVariant) -> resource::ResourcePacket {
-    resource::from_key_value(HashMap::from([(resource::ResourceType::Wood, -10)]))
+    resource::from_key_value(HashMap::from([(resource::ResourceType::Wood, 10)]))
 }
 pub fn build_action_req(_cv: CellStateVariant) -> resource::ResourceValue {
     10
 }
 
 pub fn use_builder(pos: hexgrid::Pos, mut g: GameState) -> GameState {
-    let p = resource::new_packet(-1, 0);
+    let p = resource::new_packet(1, 0);
     logistics_plane::try_borrow_resources(pos, p, &mut g).unwrap()
 }
 

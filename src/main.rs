@@ -67,7 +67,6 @@ pub struct GameResources {
     tiles: i32,
     leak: i32,
     heat_efficency: f64,
-    wood: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -109,7 +108,6 @@ impl Application for GameState {
                 tiles: 0,
                 leak: 1,
                 heat_efficency: 0.0,
-                wood: 400,
             },
             action_machine: actionmachine::new(),
             img_buffer: visualize_cell::new_img_buffer(),

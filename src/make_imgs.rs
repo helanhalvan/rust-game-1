@@ -10,7 +10,7 @@ use palette::{FromColor, Hsl, Srgb};
 
 use rand::Rng;
 
-use crate::celldata::{CellState, CellStateData};
+use crate::celldata::{CellState, CellStateData, Resource};
 use crate::visualize_cell;
 use crate::{
     celldata::{self},
@@ -95,7 +95,8 @@ pub fn make_imgs() {
                     context.close_path();
                     let _ = context.stroke();
                 }
-                CellStateData::Resource { resources } => {
+                CellStateData::Resource(Resource::Pure(resources))
+                | CellStateData::Resource(Resource::WithVariant(resources, _)) => {
                     let map = resource::to_key_value(resources);
                     let number_of_resources = map.keys().count() as f64;
                     match map.get(&resource::ResourceType::Builders) {
@@ -224,7 +225,8 @@ fn make_path(cellstate: celldata::CellState) -> String {
             let dir = base + &cv.to_string() + "/inprogress/";
             (dir.clone(), dir + &countdown.to_string() + &".png")
         }
-        celldata::CellStateData::Resource { resources: r, .. } => {
+        celldata::CellStateData::Resource(Resource::Pure(r))
+        | celldata::CellStateData::Resource(Resource::WithVariant(r, _)) => {
             let name = resource::to_key_value(r)
                 .into_iter()
                 .sorted()

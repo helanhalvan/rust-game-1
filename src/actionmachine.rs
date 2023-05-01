@@ -256,6 +256,14 @@ fn do_tick(
             variant: celldata::CellStateVariant::Hot,
             ..
         } => {}
+        celldata::CellState {
+            variant: celldata::CellStateVariant::Building,
+            data: celldata::CellStateData::Resource(r),
+        } => match r {
+            celldata::Resource::WithVariant(_, _) => todo!(),
+            _ => todo!(),
+        },
+        //TODO handle building + resource
         a => {
             println!("unexpected {:?}{:?}{:?}", x, y, a);
             unimplemented!()

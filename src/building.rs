@@ -96,14 +96,22 @@ fn buildtime(cv: CellStateVariant) -> Option<actionmachine::InProgressWait> {
     }
 }
 
-fn buildcost(cv: CellStateVariant) -> Option<CellState> {
+fn buildcost_cell(cv: CellStateVariant) -> Option<CellState> {
     match cv {
-        CellStateVariant::Hub => Some(resource::new_stockpile(
+        to @ CellStateVariant::Hub => Some(resource::new_stockpile(
             CellStateVariant::Building,
             HashMap::from([(resource::ResourceType::Builders, 1)]),
+            to,
         )),
         _ => None,
     }
+}
+
+pub fn required_resources(_cv: CellStateVariant) -> Vec<resource::ResourceType> {
+    vec![
+        resource::ResourceType::Wood,
+        resource::ResourceType::BuildTime,
+    ]
 }
 
 pub fn max_buildtime() -> actionmachine::InProgressWait {
@@ -131,7 +139,7 @@ pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameS
         g.action_machine =
             actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
         g
-    } else if let Some(new_cell) = buildcost(cv) {
+    } else if let Some(new_cell) = buildcost_cell(cv) {
         hexgrid::set(pos, new_cell, &mut g.matrix);
         g = logistics_plane::use_builder(pos, g);
         g.action_machine =

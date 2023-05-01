@@ -5,13 +5,24 @@ use enum_iterator::Sequence;
 
 use crate::{actionmachine, building, hexgrid, resource};
 
+// Data in a cell (position) on the board
+// The two-field struct makes a bunch of impossible stuff representable
+// Converting back to single enum might be possible
+// but implementing into for CellState -> CellstateVariant
+// and CellState -> CellStateData
+// Seems very boilerplatey
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CellState {
     pub variant: CellStateVariant,
     pub data: CellStateData,
 }
 
-//Data in a cell (position) on the board
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Resource {
+    Pure(resource::ResourceStockpile),
+    WithVariant(resource::ResourceStockpile, CellStateVariant),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CellStateData {
     Unit,
@@ -22,9 +33,7 @@ pub enum CellStateData {
         countdown: actionmachine::InProgressWait,
         on_done_data: actionmachine::OnDoneData,
     },
-    Resource {
-        resources: resource::ResourceStockpile,
-    },
+    Resource(Resource),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

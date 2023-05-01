@@ -6,6 +6,7 @@ use crate::celldata;
 use crate::celldata::CellState;
 use crate::celldata::CellStateData;
 use crate::celldata::CellStateVariant;
+use crate::celldata::Resource;
 use itertools::Itertools;
 
 pub type ResourceValue = i32;
@@ -43,6 +44,7 @@ pub fn new_hub() -> CellState {
 pub fn new_stockpile(
     cv: CellStateVariant,
     data: HashMap<ResourceType, ResourceValue>,
+    to: CellStateVariant,
 ) -> CellState {
     let stockpile = data.into_iter().fold(empty_stockpile(cv), |acc, (t, d)| {
         set(
@@ -54,13 +56,24 @@ pub fn new_stockpile(
             acc,
         )
     });
-    stockpile_to_cell(cv, stockpile)
+    stockpile_to_cell_with_extra_variant(cv, stockpile, to)
+}
+
+fn stockpile_to_cell_with_extra_variant(
+    cv: CellStateVariant,
+    s: ResourceStockpile,
+    to: CellStateVariant,
+) -> CellState {
+    CellState {
+        variant: cv,
+        data: CellStateData::Resource(Resource::WithVariant(s, to)),
+    }
 }
 
 fn stockpile_to_cell(cv: CellStateVariant, s: ResourceStockpile) -> CellState {
     CellState {
         variant: cv,
-        data: CellStateData::Resource { resources: s },
+        data: CellStateData::Resource(Resource::Pure(s)),
     }
 }
 
@@ -108,7 +121,7 @@ pub fn add_packet(p: ResourcePacket, c: CellState) -> Option<CellState> {
     match c {
         CellState {
             variant: cv,
-            data: CellStateData::Resource { resources },
+            data: CellStateData::Resource(Resource::Pure(resources)),
         } => {
             if let Some(s) = add_packet_stockpile(p, resources) {
                 Some(stockpile_to_cell(cv, s))
@@ -157,13 +170,20 @@ fn resource_variants() -> Vec<CellStateVariant> {
     vec![CellStateVariant::Hub, CellStateVariant::Building]
 }
 
+fn extra_data_variations(cv: CellStateVariant) -> Option<Vec<CellStateVariant>> {
+    match cv {
+        CellStateVariant::Building => Some(vec![CellStateVariant::Hub]),
+        _ => None,
+    }
+}
+
 fn max(cv: CellStateVariant, t: ResourceType) -> i32 {
     match (cv, t) {
         (CellStateVariant::Hub, ResourceType::LogisticsPoints) => 9,
-        (CellStateVariant::Hub, ResourceType::Wood) => 1,
+        (CellStateVariant::Hub, ResourceType::Wood) => 100,
         (CellStateVariant::Hub, ResourceType::Builders) => 3,
         (CellStateVariant::Building, ResourceType::BuildTime) => 10,
-        (CellStateVariant::Building, ResourceType::Wood) => 1,
+        (CellStateVariant::Building, ResourceType::Wood) => 100,
         (CellStateVariant::Building, ResourceType::Builders) => 2,
         _ => 0,
     }
@@ -172,10 +192,9 @@ fn max(cv: CellStateVariant, t: ResourceType) -> i32 {
 pub fn statespace() -> celldata::Statespace {
     let mut ret = vec![];
     for cv in resource_variants() {
-        let resource_space: Vec<_> = all_resourcetypes()
+        let resource_space = all_resourcetypes()
             .map(|i| 0..(max(cv, i) + 1))
-            .multi_cartesian_product()
-            .collect();
+            .multi_cartesian_product();
         for s in resource_space {
             let mut s0 = empty_stockpile(cv);
             for t in all_resourcetypes() {
@@ -188,10 +207,18 @@ pub fn statespace() -> celldata::Statespace {
                     s0,
                 );
             }
-            ret.push(stockpile_to_cell(cv, s0));
+            match extra_data_variations(cv) {
+                None => {
+                    ret.push(stockpile_to_cell(cv, s0));
+                }
+                Some(subvariants) => {
+                    for cv2 in subvariants {
+                        ret.push(stockpile_to_cell_with_extra_variant(cv, s0, cv2));
+                    }
+                }
+            }
         }
     }
-    dbg!(ret.clone());
     ret
 }
 

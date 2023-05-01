@@ -18,22 +18,11 @@ pub struct CellState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Resource {
-    Pure(resource::ResourceStockpile),
-    WithVariant(resource::ResourceStockpile, CellStateVariant),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CellStateData {
     Unit,
-    Slot {
-        slot: Slot,
-    },
-    InProgress {
-        countdown: actionmachine::InProgressWait,
-        on_done_data: actionmachine::OnDoneData,
-    },
-    Resource(Resource),
+    Slot { slot: Slot },
+    InProgress(actionmachine::InProgress),
+    Resource(resource::Resource),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

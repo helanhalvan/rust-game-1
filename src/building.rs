@@ -127,13 +127,8 @@ pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameS
         hexgrid::set(pos, new_cell, &mut g.matrix);
         g
     } else if let Some(b) = buildtime(cv) {
-        let new_cell = celldata::CellState {
-            variant: CellStateVariant::Building,
-            data: celldata::CellStateData::InProgress {
-                countdown: b,
-                on_done_data: actionmachine::OnDoneData::CellStateVariant(cv),
-            },
-        };
+        let new_cell =
+            actionmachine::new_in_progress_with_variant(CellStateVariant::Building, b, cv);
         hexgrid::set(pos, new_cell, &mut g.matrix);
         g = logistics_plane::use_builder(pos, g);
         g.action_machine =
@@ -157,13 +152,7 @@ pub fn statespace() -> celldata::Statespace {
     let mut ret = vec![];
     for j in 1..actionmachine::in_progress_max(cv) + 1 {
         for b in to_build.clone() {
-            ret.push(celldata::CellState {
-                variant: cv,
-                data: celldata::CellStateData::InProgress {
-                    countdown: j,
-                    on_done_data: actionmachine::OnDoneData::CellStateVariant(b),
-                },
-            })
+            ret.push(actionmachine::new_in_progress_with_variant(cv, j, b))
         }
     }
     ret.push(celldata::unit_state(CellStateVariant::Road));
@@ -190,13 +179,7 @@ pub fn do_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> Ga
                 slot: celldata::Slot::Empty,
             },
         },
-        CellStateVariant::WoodCutter => CellState {
-            variant: cv,
-            data: celldata::CellStateData::InProgress {
-                countdown: 3,
-                on_done_data: actionmachine::OnDoneData::Nothing,
-            },
-        },
+        a @ CellStateVariant::WoodCutter => actionmachine::new_in_progress(a, 3),
         CellStateVariant::Hub => {
             let new_ls_cell = LogisticsState::Source;
             hexgrid::set(pos, new_ls_cell, &mut g.logistics_plane);

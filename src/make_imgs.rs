@@ -10,8 +10,9 @@ use palette::{FromColor, Hsl, Srgb};
 
 use rand::Rng;
 
-use crate::celldata::{CellState, CellStateData, Resource};
-use crate::visualize_cell;
+use crate::celldata::{CellState, CellStateData};
+use crate::resource::Resource;
+use crate::{actionmachine, visualize_cell};
 use crate::{
     celldata::{self},
     resource,
@@ -72,7 +73,9 @@ pub fn make_imgs() {
                     context.translate(width as f64 / 2.0, height as f64 / 2.0);
                     draw_icon(context, spacing * 8.0, Icon::OtherTriangle);
                 }
-                CellStateData::InProgress { countdown, .. } => {
+                CellStateData::InProgress(actionmachine::InProgress::Pure(countdown))
+                | CellStateData::InProgress(actionmachine::InProgress::WithVariant(countdown, _)) =>
+                {
                     draw_x(context, countdown as i32, spacing * 4.0, Icon::BrokenCircle);
                 }
                 CellStateData::Slot {
@@ -221,7 +224,8 @@ fn make_path(cellstate: celldata::CellState) -> String {
     let cv = cellstate.variant;
     let base = "./img/".to_string();
     let (dir, path) = match cellstate.data {
-        celldata::CellStateData::InProgress { countdown, .. } => {
+        CellStateData::InProgress(actionmachine::InProgress::Pure(countdown))
+        | CellStateData::InProgress(actionmachine::InProgress::WithVariant(countdown, _)) => {
             let dir = base + &cv.to_string() + "/inprogress/";
             (dir.clone(), dir + &countdown.to_string() + &".png")
         }

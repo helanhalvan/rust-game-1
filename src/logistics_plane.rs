@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    celldata::{CellState, CellStateData, CellStateVariant, Resource},
+    celldata::{CellState, CellStateData, CellStateVariant},
     hexgrid::{self, Pos},
     resource, GameState,
 };
@@ -42,7 +42,7 @@ pub fn use_builder(pos: Pos, g: GameState) -> GameState {
 
 fn can_use(user: Pos, target: Pos, c: CellState) -> bool {
     match c.data {
-        CellStateData::Resource(Resource::Pure(resources)) => {
+        CellStateData::Resource(resource::Resource::Pure(resources)) => {
             let cmp = resource::new_packet(1, hexgrid::distance(user, target));
             resource::has_resources(cmp, resources)
         }

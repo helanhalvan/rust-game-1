@@ -6,7 +6,6 @@ use crate::celldata;
 use crate::celldata::CellState;
 use crate::celldata::CellStateData;
 use crate::celldata::CellStateVariant;
-use crate::celldata::Resource;
 use itertools::Itertools;
 
 pub type ResourceValue = i32;
@@ -26,6 +25,12 @@ pub enum ResourceType {
 pub struct ResourceData {
     pub current: ResourceValue,
     pub max: ResourceValue,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Resource {
+    Pure(ResourceStockpile),
+    WithVariant(ResourceStockpile, CellStateVariant),
 }
 
 pub fn new_hub() -> CellState {

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cmp::min, collections::HashMap};
 
 use crate::{
     actionmachine,
@@ -107,11 +107,60 @@ fn buildcost_cell(cv: CellStateVariant) -> Option<CellState> {
     }
 }
 
-pub fn required_resources(_cv: CellStateVariant) -> Vec<resource::ResourceType> {
-    vec![
-        resource::ResourceType::Wood,
-        resource::ResourceType::BuildTime,
-    ]
+pub fn required_per_build_action(_cv: CellStateVariant) -> resource::ResourcePacket {
+    resource::from_key_value(HashMap::from([(resource::ResourceType::Wood, -10)]))
+}
+pub fn build_action_req(_cv: CellStateVariant) -> resource::ResourceValue {
+    10
+}
+
+pub fn use_builder(pos: hexgrid::Pos, mut g: GameState) -> GameState {
+    let p = resource::new_packet(-1, 0);
+    logistics_plane::try_borrow_resources(pos, p, &mut g).unwrap()
+}
+
+pub fn do_build_progress(
+    mut c: CellState,
+    p: hexgrid::Pos,
+    r: resource::ResourceStockpile,
+    cv2: celldata::CellStateVariant,
+    mut g: GameState,
+) -> GameState {
+    g = logistics_plane::return_lp(p, g);
+
+    let builders = resource::get(resource::ResourceType::Builders, r);
+    let req = required_per_build_action(cv2);
+    let done_threshold = build_action_req(cv2);
+    let pre_progress = resource::get(resource::ResourceType::BuildTime, r);
+    let work_left = done_threshold - pre_progress;
+    let mut progress = 0;
+    for _ in 0..min(builders, work_left) {
+        if let Some(g1) = logistics_plane::try_take_resources(p, req, &mut g) {
+            g = g1;
+            progress = progress + 1
+        } else {
+            break;
+        }
+    }
+    if progress == builders {
+        if let Some(g1) =
+            logistics_plane::try_borrow_resources(p, resource::new_packet(-1, 0), &mut g)
+        {
+            if let Some(c1) = resource::add(resource::ResourceType::Builders, c, 1) {
+                c = c1;
+                g = g1;
+            }
+        }
+    }
+    if (progress + pre_progress) == done_threshold {
+        finalize_build(cv2, p, g)
+    } else {
+        dbg!((c, progress));
+        let c1 = resource::add(resource::ResourceType::BuildTime, c, progress).unwrap();
+        dbg!(c1);
+        hexgrid::set(p, c1, &mut g.matrix);
+        g
+    }
 }
 
 pub fn max_buildtime() -> actionmachine::InProgressWait {
@@ -130,13 +179,13 @@ pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameS
         let new_cell =
             actionmachine::new_in_progress_with_variant(CellStateVariant::Building, b, cv);
         hexgrid::set(pos, new_cell, &mut g.matrix);
-        g = logistics_plane::use_builder(pos, g);
+        g = use_builder(pos, g);
         g.action_machine =
             actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
         g
     } else if let Some(new_cell) = buildcost_cell(cv) {
         hexgrid::set(pos, new_cell, &mut g.matrix);
-        g = logistics_plane::use_builder(pos, g);
+        g = use_builder(pos, g);
         g.action_machine =
             actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
         g

@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 
 use crate::{
     celldata::{CellState, CellStateData, CellStateVariant},
@@ -35,11 +36,6 @@ pub fn has_worker(pos: hexgrid::Pos, g: &GameState) -> bool {
         .any(|i| can_use(pos, i, hexgrid::get(i, &g.matrix)))
 }
 
-pub fn use_builder(pos: Pos, g: GameState) -> GameState {
-    let p = resource::new_packet(-1, 0);
-    try_borrow_resources(pos, p, g).unwrap()
-}
-
 fn can_use(user: Pos, target: Pos, c: CellState) -> bool {
     match c.data {
         CellStateData::Resource(resource::Resource::Pure(resources)) => {
@@ -51,98 +47,143 @@ fn can_use(user: Pos, target: Pos, c: CellState) -> bool {
 }
 
 pub fn return_borrows(pos: hexgrid::Pos, mut g: GameState) -> GameState {
-    match hexgrid::get(pos, &g.logistics_plane) {
-        LogisticsState::Available(a) => {
-            let borrows = a.borrows;
-            g = borrows.iter().fold(g, |mut acc: GameState, (p, b)| {
-                let c0 = hexgrid::get(*p, &acc.matrix);
-                let b1 = resource::neg_packet(*b);
-                let c1 = resource::add_packet(b1, c0).unwrap();
-                hexgrid::set(*p, c1, &mut acc.matrix);
-                acc
-            });
-            hexgrid::set(
-                pos,
-                LogisticsState::Available(Available {
-                    borrows: HashMap::new(),
-                    ..a
-                }),
-                &mut g.logistics_plane,
-            );
-            g
-        }
+    let a = get_available(pos, &mut g);
+    g = a.borrows.iter().fold(g, |mut acc: GameState, (p, b)| {
+        let c0 = hexgrid::get(*p, &acc.matrix);
+        let b1 = resource::neg_packet(*b);
+        let c1 = resource::add_packet(b1, c0).unwrap();
+        hexgrid::set(*p, c1, &mut acc.matrix);
+        acc
+    });
+    hexgrid::set(
+        pos,
+        LogisticsState::Available(Available {
+            borrows: HashMap::new(),
+            ..a
+        }),
+        &mut g.logistics_plane,
+    );
+    g
+}
+
+pub fn return_lp(pos: hexgrid::Pos, mut g: GameState) -> GameState {
+    let a = get_available(pos, &mut g);
+    g = a.taken_lp.iter().fold(g, |mut acc: GameState, (p, b)| {
+        let c0 = hexgrid::get(*p, &acc.matrix);
+        let c1 = resource::add(resource::ResourceType::LogisticsPoints, c0, *b).unwrap();
+        hexgrid::set(*p, c1, &mut acc.matrix);
+        acc
+    });
+    hexgrid::set(
+        pos,
+        LogisticsState::Available(Available {
+            taken_lp: HashMap::new(),
+            ..a
+        }),
+        &mut g.logistics_plane,
+    );
+    g
+}
+
+pub fn try_take_resources(
+    src: Pos,
+    p: resource::ResourcePacket,
+    g: &mut GameState,
+) -> Option<GameState> {
+    dbg!(p);
+    try_resources(src, p, false, g)
+}
+
+pub fn try_borrow_resources(
+    src: Pos,
+    p: resource::ResourcePacket,
+    g: &mut GameState,
+) -> Option<GameState> {
+    try_resources(src, p, true, g)
+}
+
+fn get_available(src: Pos, g: &mut GameState) -> Available {
+    match hexgrid::get(src, &g.logistics_plane) {
+        LogisticsState::Available(a) => a,
         a => {
-            dbg!(a);
-            unimplemented!()
+            unimplemented!("{:?}", a)
         }
     }
 }
 
-fn try_borrow_resources(
+fn try_resources(
     src: Pos,
     p: resource::ResourcePacket,
-    mut g: GameState,
+    is_borrow: bool,
+    g: &mut GameState,
 ) -> Option<GameState> {
-    match hexgrid::get(src, &g.logistics_plane) {
-        LogisticsState::Available(a) => {
-            let mut vec: Vec<_> = a
-                .locations
-                .clone()
-                .into_iter()
-                .map(|i| (hexgrid::distance(src, i), i))
-                .collect();
-            vec.sort_by(|(a, _), (b, _)| a.cmp(b));
-            for (distance, target) in vec {
-                let p1 =
-                    resource::add_to_packet(resource::ResourceType::LogisticsPoints, -distance, p);
-                let target_cell = hexgrid::get(target, &g.matrix);
-                if let Some(new) = resource::add_packet(p1, target_cell) {
-                    hexgrid::set(target, new, &mut g.matrix);
-                    let lp1 = update_borrows(a, p1, target);
-                    hexgrid::set(src, lp1, &mut g.logistics_plane);
-                    return Some(g);
-                }
+    let a = get_available(src, g);
+    let mut vec: Vec<_> = a
+        .locations
+        .clone()
+        .into_iter()
+        .map(|i| (hexgrid::distance(src, i), i))
+        .collect();
+    vec.sort_by(|(a, _), (b, _)| a.cmp(b));
+    for (distance, target) in vec {
+        let p1 = resource::add_to_packet(resource::ResourceType::LogisticsPoints, -distance, p);
+        let target_cell = hexgrid::get(target, &g.matrix);
+        dbg!(distance, target, p1);
+        if let Some(new) = resource::add_packet(p1, target_cell) {
+            hexgrid::set(target, new, &mut g.matrix);
+            if is_borrow {
+                let lp1 = update_borrows(a, p1, target);
+                hexgrid::set(src, lp1, &mut g.logistics_plane);
+            } else {
+                let lp1 = update_take(a, distance, target);
+                hexgrid::set(src, lp1, &mut g.logistics_plane);
             }
-            None
-        }
-        a => {
-            dbg!(a);
-            None
+            return Some(g.clone());
         }
     }
+    None
+}
+
+fn update_take(a: Available, p: resource::ResourceValue, target: Pos) -> LogisticsState {
+    let taken_lp = insert_or_join(a.taken_lp, |a, b| a + b, target, p);
+    LogisticsState::Available(Available { taken_lp, ..a })
 }
 
 fn update_borrows(a: Available, p: resource::ResourcePacket, target: Pos) -> LogisticsState {
-    let mut borrows = a.borrows;
-    match borrows.get(&target) {
+    let borrows = insert_or_join(
+        a.borrows,
+        |a, b| resource::add_packet_to_packet(a, b),
+        target,
+        p,
+    );
+    LogisticsState::Available(Available { borrows, ..a })
+}
+
+fn insert_or_join<K, V: Clone>(
+    mut m: HashMap<K, V>,
+    join: fn(V, V) -> V,
+    k: K,
+    v: V,
+) -> HashMap<K, V>
+where
+    K: Hash + std::cmp::Eq + PartialEq,
+{
+    match m.get(&k) {
         None => {
-            borrows.insert(target, p);
+            m.insert(k, v);
         }
-        Some(p0) => {
-            let p3 = resource::add_packet_to_packet(*p0, p);
-            borrows.insert(target, p3);
+        Some(v2) => {
+            let v3 = join(v2.clone(), v);
+            m.insert(k, v3);
         }
     }
-    LogisticsState::Available(Available { borrows, ..a })
+    m
 }
 
 fn connected_sources(pos: hexgrid::Pos, g: &GameState) -> Vec<hexgrid::Pos> {
     match hexgrid::get(pos, &g.logistics_plane) {
         LogisticsState::None => vec![],
-        LogisticsState::Available(Available { locations, .. }) => {
-            if let Some(ret) = locations
-                .into_iter()
-                .map(|i| connected_sources(i, g))
-                .reduce(|mut acc, mut i| {
-                    acc.append(&mut i);
-                    acc
-                })
-            {
-                ret
-            } else {
-                vec![]
-            }
-        }
+        LogisticsState::Available(Available { locations, .. }) => locations.into_iter().collect(),
         LogisticsState::Source => {
             vec![pos]
         }

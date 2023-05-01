@@ -11,6 +11,7 @@ use itertools::Itertools;
 pub type ResourceValue = i32;
 pub type ResourceStockpile = ResourceContainer<ResourceData>;
 pub type ResourcePacket = ResourceContainer<ResourceValue>;
+pub type PacketMap = HashMap<ResourceType, i32>;
 pub type ResourceContainer<T> = [T; ResourceType::CARDINALITY as usize];
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Hash, Sequence)]
@@ -134,6 +135,16 @@ pub fn add_packet(p: ResourcePacket, c: CellState) -> Option<CellState> {
                 None
             }
         }
+        CellState {
+            variant: cv,
+            data: CellStateData::Resource(Resource::WithVariant(resources, cv2)),
+        } => {
+            if let Some(s) = add_packet_stockpile(p, resources) {
+                Some(stockpile_to_cell_with_extra_variant(cv, s, cv2))
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
@@ -144,13 +155,21 @@ pub fn add(t: ResourceType, c: CellState, to_add: i32) -> Option<CellState> {
     add_packet(p, c)
 }
 
-pub fn to_key_value(r: ResourceStockpile) -> HashMap<ResourceType, i32> {
+pub fn to_key_value(r: ResourceStockpile) -> PacketMap {
     let mut ret = HashMap::new();
     for i in all_resourcetypes() {
         let value = get(i, r);
         if value > 0 {
             ret.insert(i, value);
         }
+    }
+    ret
+}
+
+pub fn from_key_value(map: PacketMap) -> ResourcePacket {
+    let mut ret = empty_packet();
+    for (t, v) in map {
+        ret = set(t, v, ret)
     }
     ret
 }

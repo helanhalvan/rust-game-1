@@ -177,11 +177,7 @@ fn do_progress_done_extra_variant(
     g
 }
 
-fn do_tick(
-    p @ hexgrid::Pos { x, y }: hexgrid::Pos,
-    c: celldata::CellState,
-    mut g: GameState,
-) -> GameState {
+fn do_tick(p: hexgrid::Pos, c: celldata::CellState, mut g: GameState) -> GameState {
     match c {
         celldata::CellState {
             variant,
@@ -273,16 +269,13 @@ fn do_tick(
             variant: celldata::CellStateVariant::Hot,
             ..
         } => {}
-        celldata::CellState {
+        c @ celldata::CellState {
             variant: celldata::CellStateVariant::Building,
-            data: celldata::CellStateData::Resource(r),
-        } => match r {
-            resource::Resource::WithVariant(_, _) => todo!(),
-            _ => todo!(),
-        },
-        //TODO handle building + resource
+            data:
+                celldata::CellStateData::Resource(resource::Resource::WithVariant(resources, goal_cv)),
+        } => g = building::do_build_progress(c, p, resources, goal_cv, g),
         a => {
-            println!("unexpected {:?}{:?}{:?}", x, y, a);
+            println!("unexpected {:?}{:?}{:?}", g, p, a);
             unimplemented!()
         }
     };

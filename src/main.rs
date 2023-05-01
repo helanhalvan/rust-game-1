@@ -6,7 +6,6 @@ pub mod hexgrid;
 pub mod logistics_plane;
 pub mod make_imgs;
 pub mod resource;
-pub mod type_union;
 pub mod visualize_cell;
 
 use iced::executor;

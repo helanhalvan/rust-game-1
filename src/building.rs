@@ -144,7 +144,7 @@ pub fn do_build_progress(
     }
     if progress == builders {
         if let Some(g1) =
-            logistics_plane::try_borrow_resources(p, resource::new_packet(-1, 0), &mut g)
+            logistics_plane::try_borrow_resources(p, resource::new_packet(1, 0), &mut g)
         {
             if let Some(c1) = resource::add(resource::ResourceType::Builders, c, 1) {
                 c = c1;

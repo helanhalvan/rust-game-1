@@ -91,11 +91,7 @@ impl Application for GameState {
     fn new(_flags: ()) -> (Self, Command<Message>) {
         let start_x: i32 = 0;
         let start_y: i32 = 0;
-        let base_cell = celldata::CellState {
-            variant: celldata::CellStateVariant::Hidden,
-            data: celldata::CellStateData::Unit,
-        };
-        let m1 = hexgrid::new(base_cell);
+        let m1 = hexgrid::new(hexgrid::EmptyContext::None);
         let mut g = GameState {
             matrix: m1,
             logistics_plane: logistics_plane::new_plane(),

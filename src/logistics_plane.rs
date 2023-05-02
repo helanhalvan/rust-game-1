@@ -10,7 +10,7 @@ use crate::{
 // mirror of the main board (hexgrid::Board) in size
 // for use of the building subsytem
 // need to keep "available logistics" somewhere
-pub type LogisticsPlane = hexgrid::Hexgrid<LogisticsState>;
+pub type LogisticsPlane = hexgrid::Hexgrid<LogisticsState, hexgrid::EmptyContext>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Available {
@@ -26,8 +26,16 @@ pub enum LogisticsState {
     Available(Available),
 }
 
+impl hexgrid::CellGen for LogisticsState {
+    type GenContext = hexgrid::EmptyContext;
+
+    fn new_cell(_p: Pos, _c: &mut Self::GenContext) -> Self {
+        LogisticsState::None
+    }
+}
+
 pub fn new_plane() -> LogisticsPlane {
-    hexgrid::new(LogisticsState::None)
+    hexgrid::new(hexgrid::EmptyContext::None)
 }
 
 pub fn has_worker(pos: hexgrid::Pos, g: &GameState) -> bool {

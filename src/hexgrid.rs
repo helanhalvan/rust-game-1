@@ -13,9 +13,30 @@ const INDEX_MASK: i32 = 0xF;
 const CHUNK_MASK: i32 = !(0 ^ INDEX_MASK);
 
 #[derive(Debug, Clone)]
-pub struct Hexgrid<T> {
+pub struct Hexgrid<T: CellGen<GenContext = C>, C: Clone> {
     chunks: HashMap<XYCont<i32>, Chunk<T>>,
-    base: T,
+    gen_context: C,
+}
+
+pub trait CellGen {
+    type GenContext;
+    fn new_cell(p: Pos, c: &mut Self::GenContext) -> Self;
+}
+
+#[derive(Debug, Clone)]
+pub enum EmptyContext {
+    None,
+}
+
+impl CellGen for celldata::CellState {
+    type GenContext = EmptyContext;
+
+    fn new_cell(_p: Pos, _c: &mut Self::GenContext) -> Self {
+        celldata::CellState {
+            variant: celldata::CellStateVariant::Hidden,
+            data: celldata::CellStateData::Unit,
+        }
+    }
 }
 
 pub type Matrix<T> = Vec<Vec<T>>;
@@ -23,7 +44,7 @@ pub type Matrix<T> = Vec<Vec<T>>;
 //Could be array if generalized array initalization was easy
 type Chunk<T> = Matrix<T>;
 
-pub type Board = Hexgrid<celldata::CellState>;
+pub type Board = Hexgrid<celldata::CellState, EmptyContext>;
 
 pub type Pos = XYCont<i32>;
 
@@ -80,19 +101,30 @@ impl Add<XYCont<i32>> for XYCont<i32> {
     }
 }
 
-pub fn new<T: Clone>(base: T) -> Hexgrid<T> {
+pub fn new<T: Clone + CellGen<GenContext = C>, C: Clone>(gen_context: C) -> Hexgrid<T, C> {
     Hexgrid {
         chunks: HashMap::new(),
-        base,
+        gen_context: gen_context,
     }
 }
 
-fn new_chunk<T: Clone>(grid: &Hexgrid<T>) -> Chunk<T> {
-    vec![vec![grid.base.clone(); CHUNK_SIZE]; CHUNK_SIZE]
+fn new_chunk<T: Clone + CellGen<GenContext = C>, C: Clone>(
+    chunk_key: Pos,
+    context: &mut C,
+) -> Chunk<T> {
+    let mut ret = vec![];
+    for _ in 0..CHUNK_SIZE {
+        let mut row = vec![];
+        for _ in 0..CHUNK_SIZE {
+            row.push(T::new_cell(chunk_key, context))
+        }
+        ret.push(row)
+    }
+    ret
 }
 
-pub fn view_port<T: Clone>(
-    source: &Hexgrid<T>,
+pub fn view_port<T: Clone + CellGen<GenContext = C>, C: Clone>(
+    source: &Hexgrid<T, C>,
     XYCont { x, y }: XYCont<i32>,
     height_extra: i32,
     width_extra: i32,
@@ -115,18 +147,21 @@ pub fn view_port<T: Clone>(
     ret
 }
 
-pub fn pos_iter_to_cells<'a, T: Clone>(
+pub fn pos_iter_to_cells<'a, T: Clone + CellGen<GenContext = C>, C: Clone>(
     pos: impl IntoIterator<Item = Pos> + 'a,
-    m: &'a mut Hexgrid<T>,
+    m: &'a mut Hexgrid<T, C>,
 ) -> impl Iterator<Item = (Pos, T)> + 'a {
     let ret = pos.into_iter().map(|p| (p, get(p, m)));
     return ret;
 }
 
-pub fn get_connected<T: Clone + std::cmp::Eq + std::hash::Hash>(
+pub fn get_connected<
+    T: Clone + std::cmp::Eq + std::hash::Hash + CellGen<GenContext = C>,
+    C: Clone,
+>(
     p: Pos,
     t: fn(T) -> bool,
-    m: &mut Hexgrid<T>,
+    m: &mut Hexgrid<T, C>,
 ) -> impl IntoIterator<Item = (Pos, T)> {
     let mut set_size = 0;
     let mut connected: HashSet<(Pos, _)> = neighbors(p, m).filter(|(_, i)| t(i.clone())).collect();
@@ -142,9 +177,9 @@ pub fn get_connected<T: Clone + std::cmp::Eq + std::hash::Hash>(
     return connected;
 }
 
-pub fn within<'a, T: Clone>(
+pub fn within<'a, T: Clone + CellGen<GenContext = C>, C: Clone>(
     Pos { x: x0, y: y0 }: Pos,
-    m: &'a mut Hexgrid<T>,
+    m: &'a mut Hexgrid<T, C>,
     range: i32,
 ) -> impl Iterator<Item = (Pos, T)> + 'a {
     let o_x = x0 as i32;
@@ -175,31 +210,35 @@ fn v_mul_reduce(v1: &Vec<i32>, v2: &Vec<XYCont<i32>>) -> XYCont<i32> {
     ret
 }
 
-pub fn neighbors<'a, T: Clone>(
+pub fn neighbors<'a, T: Clone + CellGen<GenContext = C>, C: Clone>(
     p: Pos,
-    m: &'a mut Hexgrid<T>,
+    m: &'a mut Hexgrid<T, C>,
 ) -> impl Iterator<Item = (Pos, T)> + 'a {
     within(p, m, 1)
 }
 
-pub fn set<T: Clone>(p: Pos, new_cell: T, m: &mut Hexgrid<T>) {
+pub fn set<T: Clone + CellGen<GenContext = C>, C: Clone>(
+    p: Pos,
+    new_cell: T,
+    m: &mut Hexgrid<T, C>,
+) {
     dbg!(p);
     let (chunk_key, in_chunk_key) = to_chunk_keys(p);
     let mut chunk = if let Some(chunk) = m.chunks.get(&chunk_key) {
         chunk.clone()
     } else {
-        new_chunk(m)
+        new_chunk(chunk_key, &mut m.gen_context)
     };
     chunk[in_chunk_key.x][in_chunk_key.y] = new_cell;
     m.chunks.insert(chunk_key, chunk);
 }
 
-pub fn get<T: Clone>(p: Pos, m: &mut Hexgrid<T>) -> T {
+pub fn get<T: Clone + CellGen<GenContext = C>, C: Clone>(p: Pos, m: &mut Hexgrid<T, C>) -> T {
     let (chunk_key, in_chunk_key) = to_chunk_keys(p);
     let chunk = if let Some(c) = m.chunks.get(&chunk_key) {
         c.clone()
     } else {
-        let chunk = new_chunk(m);
+        let chunk = new_chunk(chunk_key, &mut m.gen_context);
         m.chunks.insert(chunk_key, chunk.clone());
         chunk
     };
@@ -209,12 +248,12 @@ pub fn get<T: Clone>(p: Pos, m: &mut Hexgrid<T>) -> T {
 // this version of get does not persist values pulled out of Hexgrid
 // so repeated get-calls might result in different returned values
 // when pulling data from un-initalized chunks
-pub fn unsafe_get<T: Clone>(p: Pos, m: &Hexgrid<T>) -> T {
+pub fn unsafe_get<T: Clone + CellGen<GenContext = C>, C: Clone>(p: Pos, m: &Hexgrid<T, C>) -> T {
     let (chunk_key, in_chunk_key) = to_chunk_keys(p);
     let chunk = if let Some(c) = m.chunks.get(&chunk_key) {
         c.clone()
     } else {
-        new_chunk(m)
+        new_chunk(chunk_key, &mut (m.gen_context.clone()))
     };
     chunk[in_chunk_key.x][in_chunk_key.y].clone()
 }

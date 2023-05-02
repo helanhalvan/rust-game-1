@@ -139,6 +139,7 @@ fn do_in_progress(
 fn do_pure_progress_done(p: hexgrid::Pos, cv: CellStateVariant, mut g: GameState) -> GameState {
     match cv {
         celldata::CellStateVariant::WoodCutter => {
+            g = logistics_plane::return_lp(p, g);
             let packet =
                 resource::from_key_value(HashMap::from([(resource::ResourceType::Wood, -10)]));
             if let Some(g1) = logistics_plane::try_take_resources(p, packet, &mut g) {

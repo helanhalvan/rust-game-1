@@ -205,7 +205,7 @@ pub fn update_logistics(pos: hexgrid::Pos, is_hub: bool, mut g: GameState) -> Ga
         other_roads.insert(pos);
         other_roads
     };
-    g.logistics_plane = add_to_neighbors(new_network, connected_hubs, g.logistics_plane);
+    g.logistics_plane = add_to_close(new_network, connected_hubs, g.logistics_plane);
     g
 }
 
@@ -240,7 +240,7 @@ fn find_connected_hubs(pos: hexgrid::Pos, g: &GameState) -> impl Iterator<Item =
     .map(|(p, _)| p)
 }
 
-fn add_to_neighbors(
+fn add_to_close(
     src: impl IntoIterator<Item = hexgrid::Pos>,
     to_add: impl IntoIterator<Item = hexgrid::Pos>,
     lp: LogisticsPlane,
@@ -250,7 +250,7 @@ fn add_to_neighbors(
         lp
     } else {
         src.into_iter().fold(lp, |b, src_item| {
-            hexgrid::neighbors(src_item, &(b.clone()))
+            hexgrid::within(src_item, &(b.clone()), 2)
                 .filter_map(|i| i)
                 .fold(b, |mut acc, (pn, c)| match c {
                     LogisticsState::None => {

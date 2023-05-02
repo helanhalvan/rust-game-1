@@ -5,6 +5,7 @@ pub mod css;
 pub mod hexgrid;
 pub mod logistics_plane;
 pub mod make_imgs;
+pub mod make_world;
 pub mod resource;
 pub mod visualize_cell;
 
@@ -35,7 +36,8 @@ pub fn main() {
         });
     } else if args[1] == "images" {
         make_imgs::make_imgs();
-    } else {
+    } else if args[1] == "test" {
+        make_world::test();
         dbg!(args);
     }
 }
@@ -87,23 +89,16 @@ impl Application for GameState {
     }
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
-        let xmax = 50;
-        let ymax = 90;
-        let start_x: usize = 25;
-        let start_y: usize = 45;
-        let m1 = vec![
-            vec![
-                celldata::CellState {
-                    variant: celldata::CellStateVariant::Hidden,
-                    data: celldata::CellStateData::Unit
-                };
-                xmax
-            ];
-            ymax
-        ];
+        let start_x: i32 = 0;
+        let start_y: i32 = 0;
+        let base_cell = celldata::CellState {
+            variant: celldata::CellStateVariant::Hidden,
+            data: celldata::CellStateData::Unit,
+        };
+        let m1 = hexgrid::new(base_cell);
         let mut g = GameState {
             matrix: m1,
-            logistics_plane: logistics_plane::new_plane(xmax, ymax),
+            logistics_plane: logistics_plane::new_plane(),
             resources: GameResources {
                 tiles: 0,
                 leak: 1,
@@ -134,7 +129,7 @@ impl Application for GameState {
         };
         let cv = celldata::CellStateVariant::Hub;
         g = building::do_build(cv, p, g);
-        let mut start_hub = hexgrid::get(p, &g.matrix);
+        let mut start_hub = hexgrid::get(p, &mut g.matrix);
         start_hub = resource::add(resource::ResourceType::Wood, start_hub, 100).unwrap();
         hexgrid::set(p, start_hub, &mut g.matrix);
         (g, Command::none())
@@ -187,12 +182,11 @@ impl Application for GameState {
     }
 
     fn view(&self) -> Element<Message> {
-        let view_matrix = hexgrid::sub_matrix(
+        let view_matrix = hexgrid::view_port(
             &self.matrix,
             self.io_cache.top_left_hex,
             self.io_cache.view_cells_x - 1,
             self.io_cache.view_cells_y - 1,
-            celldata::unit_state(celldata::CellStateVariant::OutOfBounds),
         );
         let hexgrid::XYCont {
             x: base_x,

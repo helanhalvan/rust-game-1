@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     ops::{Add, Mul},
 };
 
@@ -8,10 +8,24 @@ use itertools::Itertools;
 use crate::celldata;
 use std::hash::Hash;
 
-pub type Hexgrid<T> = Vec<Vec<T>>;
+const CHUNK_SIZE: usize = 0x10;
+const INDEX_MASK: i32 = 0xF;
+const CHUNK_MASK: i32 = !(0 ^ INDEX_MASK);
+
+#[derive(Debug, Clone)]
+pub struct Hexgrid<T> {
+    chunks: HashMap<XYCont<i32>, Chunk<T>>,
+    base: T,
+}
+
+pub type Matrix<T> = Vec<Vec<T>>;
+
+//Could be array if generalized array initalization was easy
+type Chunk<T> = Matrix<T>;
+
 pub type Board = Hexgrid<celldata::CellState>;
 
-pub type Pos = XYCont<usize>;
+pub type Pos = XYCont<i32>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct XYCont<C> {
@@ -19,6 +33,7 @@ pub struct XYCont<C> {
     pub y: C,
 }
 
+#[derive(Debug, Clone)]
 struct XYZCont<C> {
     x: C,
     y: C,
@@ -65,28 +80,34 @@ impl Add<XYCont<i32>> for XYCont<i32> {
     }
 }
 
-pub fn sub_matrix<T: Clone>(
+pub fn new<T: Clone>(base: T) -> Hexgrid<T> {
+    Hexgrid {
+        chunks: HashMap::new(),
+        base,
+    }
+}
+
+fn new_chunk<T: Clone>(grid: &Hexgrid<T>) -> Chunk<T> {
+    vec![vec![grid.base.clone(); CHUNK_SIZE]; CHUNK_SIZE]
+}
+
+pub fn view_port<T: Clone>(
     source: &Hexgrid<T>,
-    _center @ XYCont { x, y }: XYCont<i32>,
+    XYCont { x, y }: XYCont<i32>,
     height_extra: i32,
     width_extra: i32,
-    default: T,
-) -> Hexgrid<T> {
+) -> Matrix<T> {
     let mut ret = vec![];
     for dx in 0..(height_extra + 1) {
         let mut y_buff = vec![];
         for dy in 0..(width_extra + 1) {
-            let new = if let Some((_, new)) = to_pos_cell(
+            let new = unsafe_get(
                 XYCont {
                     x: x + dx,
                     y: y + dy,
                 },
                 source,
-            ) {
-                new
-            } else {
-                default.clone()
-            };
+            );
             y_buff.push(new);
         }
         ret.push(y_buff)
@@ -94,71 +115,28 @@ pub fn sub_matrix<T: Clone>(
     ret
 }
 
-pub fn to_pos_cell<T: Clone, C: TryInto<usize>>(
-    XYCont { x: raw_x, y: raw_y }: XYCont<C>,
-    source: &Hexgrid<T>,
-) -> Option<(Pos, T)> {
-    match raw_x.try_into() {
-        Ok(x1) => match raw_y.try_into() {
-            Ok(y1) => {
-                let x: usize = x1;
-                let y: usize = y1;
-                match source.get(x) {
-                    Some(v) => match v.get(y) {
-                        Some(i) => Some((Pos { x, y }, i.clone())),
-                        None => None,
-                    },
-                    None => None,
-                }
-            }
-            Err(_) => None,
-        },
-        Err(_) => None,
-    }
-}
-
 pub fn pos_iter_to_cells<'a, T: Clone>(
     pos: impl IntoIterator<Item = Pos> + 'a,
-    m: &'a Hexgrid<T>,
-) -> impl Iterator<Item = Option<(Pos, T)>> + 'a {
-    let ret = pos.into_iter().map(|p @ Pos { x, y }| match m.get(x) {
-        Some(v) => match v.get(y) {
-            None => None,
-            Some(a) => Some((p, a.clone())),
-        },
-        None => None,
-    });
+    m: &'a mut Hexgrid<T>,
+) -> impl Iterator<Item = (Pos, T)> + 'a {
+    let ret = pos.into_iter().map(|p| (p, get(p, m)));
     return ret;
 }
 
 pub fn get_connected<T: Clone + std::cmp::Eq + std::hash::Hash>(
     p: Pos,
     t: fn(T) -> bool,
-    m: &Hexgrid<T>,
+    m: &mut Hexgrid<T>,
 ) -> impl IntoIterator<Item = (Pos, T)> {
     let mut set_size = 0;
-    let mut connected: HashSet<(Pos, _)> = neighbors(p, m)
-        .filter_map(|i| match i.clone() {
-            Some((_x, a)) => {
-                if t(a) {
-                    i
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        })
-        .collect();
+    let mut connected: HashSet<(Pos, _)> = neighbors(p, m).filter(|(_, i)| t(i.clone())).collect();
     while connected.len() > set_size {
         set_size = connected.len();
-        let new_connected = connected
-            .iter()
-            .flat_map(|(p, _)| neighbors(*p, m))
-            .filter_map(|i| match i.clone() {
-                Some((_x, a)) if t(a.clone()) => i,
-                _ => None,
-            })
-            .collect();
+        let mut new_connected = HashSet::new();
+        for (i, _) in connected.clone() {
+            let batch = neighbors(i, m).filter(|(_, i)| t(i.clone())).collect();
+            new_connected = new_connected.union(&batch).map(|i| i.clone()).collect();
+        }
         connected = connected.union(&new_connected).map(|i| i.clone()).collect();
     }
     return connected;
@@ -166,9 +144,9 @@ pub fn get_connected<T: Clone + std::cmp::Eq + std::hash::Hash>(
 
 pub fn within<'a, T: Clone>(
     Pos { x: x0, y: y0 }: Pos,
-    m: &'a Hexgrid<T>,
+    m: &'a mut Hexgrid<T>,
     range: i32,
-) -> impl Iterator<Item = Option<(Pos, T)>> + 'a {
+) -> impl Iterator<Item = (Pos, T)> + 'a {
     let o_x = x0 as i32;
     let o_y = y0 as i32;
     let origin = XYCont { x: o_x, y: o_y };
@@ -183,13 +161,6 @@ pub fn within<'a, T: Clone>(
         .multi_cartesian_product()
         .map(|v| v_mul_reduce(&v, &unit_vectors) + origin)
         .filter(|v| distance(*v, XYCont { x: o_x, y: o_y }) <= range)
-        .map(|XYCont { x, y }| match (x.try_into(), y.try_into()) {
-            (Ok(x1), Ok(y1)) => Pos { x: x1, y: y1 },
-            _ => Pos {
-                x: usize::MAX,
-                y: usize::MAX,
-            },
-        })
         .collect();
 
     let ret = pos_iter_to_cells(close_space, m);
@@ -206,19 +177,61 @@ fn v_mul_reduce(v1: &Vec<i32>, v2: &Vec<XYCont<i32>>) -> XYCont<i32> {
 
 pub fn neighbors<'a, T: Clone>(
     p: Pos,
-    m: &'a Hexgrid<T>,
-) -> impl Iterator<Item = Option<(Pos, T)>> + 'a {
+    m: &'a mut Hexgrid<T>,
+) -> impl Iterator<Item = (Pos, T)> + 'a {
     within(p, m, 1)
 }
 
-pub fn set<T>(Pos { x, y }: Pos, new_cell: T, m: &mut Hexgrid<T>) {
-    m[x][y] = new_cell;
+pub fn set<T: Clone>(p: Pos, new_cell: T, m: &mut Hexgrid<T>) {
+    dbg!(p);
+    let (chunk_key, in_chunk_key) = to_chunk_keys(p);
+    let mut chunk = if let Some(chunk) = m.chunks.get(&chunk_key) {
+        chunk.clone()
+    } else {
+        new_chunk(m)
+    };
+    chunk[in_chunk_key.x][in_chunk_key.y] = new_cell;
+    m.chunks.insert(chunk_key, chunk);
 }
 
-pub fn get<T: Clone>(Pos { x, y }: Pos, m: &Hexgrid<T>) -> T {
-    m[x][y].clone()
+pub fn get<T: Clone>(p: Pos, m: &mut Hexgrid<T>) -> T {
+    let (chunk_key, in_chunk_key) = to_chunk_keys(p);
+    let chunk = if let Some(c) = m.chunks.get(&chunk_key) {
+        c.clone()
+    } else {
+        let chunk = new_chunk(m);
+        m.chunks.insert(chunk_key, chunk.clone());
+        chunk
+    };
+    chunk[in_chunk_key.x][in_chunk_key.y].clone()
 }
 
+// this version of get does not persist values pulled out of Hexgrid
+// so repeated get-calls might result in different returned values
+// when pulling data from un-initalized chunks
+pub fn unsafe_get<T: Clone>(p: Pos, m: &Hexgrid<T>) -> T {
+    let (chunk_key, in_chunk_key) = to_chunk_keys(p);
+    let chunk = if let Some(c) = m.chunks.get(&chunk_key) {
+        c.clone()
+    } else {
+        new_chunk(m)
+    };
+    chunk[in_chunk_key.x][in_chunk_key.y].clone()
+}
+
+fn to_chunk_keys(Pos { x, y }: Pos) -> (XYCont<i32>, XYCont<usize>) {
+    let chunk_key = XYCont {
+        x: x & CHUNK_MASK,
+        y: y & CHUNK_MASK,
+    };
+    let in_chunk_key = XYCont {
+        x: (x & INDEX_MASK) as usize,
+        y: (y & INDEX_MASK) as usize,
+    };
+    (chunk_key, in_chunk_key)
+}
+
+// https://www.redblobgames.com/grids/hexagons/
 pub fn distance<C: TryInto<i32>>(from: XYCont<C>, to: XYCont<C>) -> i32
 where
     <C as TryInto<i32>>::Error: std::fmt::Debug,
@@ -244,7 +257,7 @@ where
     let x = from_x.try_into().unwrap();
     let y = from_y.try_into().unwrap();
     let q = x;
-    let r = y - (x - ((x.abs() + 1) % 2)) / 2;
+    let r = y - (x + (x & 1)) / 2;
     XYZCont {
         x: q,
         y: r,

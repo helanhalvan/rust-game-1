@@ -37,22 +37,19 @@ pub const VIEW_CELLS_X: i32 = 7;
 pub const VIEW_CELLS_Y: i32 = 5;
 
 pub fn to_gui<'a>(
-    raw_pos: hexgrid::XYCont<i32>,
+    pos: hexgrid::XYCont<i32>,
     s: celldata::CellState,
     g: &GameState,
 ) -> Element<'a, Message> {
     let imgs: &ImgBuffer = &g.img_buffer;
-    let content = if let Some((pos, _)) = hexgrid::to_pos_cell(raw_pos, &g.matrix) {
-        match building::has_actions(pos, s, g) {
-            Some(actions) => render_action_cell(actions, pos),
-            None => match has_image(s, imgs) {
-                Some(img) => crate::Element::from(image::viewer(img.clone())),
-                None => backup_formatter(s),
-            },
-        }
-    } else {
-        backup_formatter(s)
+    let content = match building::has_actions(pos, s, g) {
+        Some(actions) => render_action_cell(actions, pos),
+        None => match has_image(s, imgs) {
+            Some(img) => crate::Element::from(image::viewer(img.clone())),
+            None => backup_formatter(s),
+        },
     };
+
     crate::Element::from(
         container(content)
             .width(CELL_Y_SIZE)

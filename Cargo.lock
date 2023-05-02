@@ -2223,6 +2223,7 @@ dependencies = [
  "palette 0.7.1",
  "rand",
  "time",
+ "worldgen",
 ]
 
 [[package]]
@@ -3179,6 +3180,12 @@ checksum = "5d129932f4644ac2396cb456385cbf9e63b5b30c6e8dc4820bdca4eb082037a5"
 dependencies = [
  "winapi",
 ]
+
+[[package]]
+name = "worldgen"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9b77fba24c873b60af296c1f0c5639114186d1ac3c99f880a7bb590bdc04065"
 
 [[package]]
 name = "x11-dl"

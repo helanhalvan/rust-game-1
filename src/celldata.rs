@@ -78,7 +78,7 @@ pub enum CellStateVariant {
     Building,
     Hub,
     Road,
-    OutOfBounds,
+    OutOfBounds, //DEAD
     Industry,
     Infrastructure,
     Extract,
@@ -112,7 +112,7 @@ pub fn is_hot_v(cv: CellStateVariant) -> bool {
     }
 }
 
-pub fn leak_delta(cv: CellStateVariant, p: hexgrid::Pos, m: &hexgrid::Board) -> Option<i32> {
+pub fn leak_delta(cv: CellStateVariant, p: hexgrid::Pos, m: &mut hexgrid::Board) -> Option<i32> {
     if let Some((base, n_effects)) = match cv {
         CellStateVariant::Insulation => Some((0, HashMap::from([(CellStateVariant::Hot, -1)]))),
         CellStateVariant::Hot => Some((
@@ -124,17 +124,14 @@ pub fn leak_delta(cv: CellStateVariant, p: hexgrid::Pos, m: &hexgrid::Board) -> 
         )),
         _ => None,
     } {
-        let n_effects_applied: i32 = hexgrid::neighbors(p, &m)
-            .map(|i| match i {
-                Some((_, cc)) => {
-                    let ct: CellStateVariant = (cc).into();
-                    if let Some(d) = n_effects.get(&ct) {
-                        *d
-                    } else {
-                        0
-                    }
+        let n_effects_applied: i32 = hexgrid::neighbors(p, m)
+            .map(|(_, i)| {
+                let ct: CellStateVariant = i.into();
+                if let Some(d) = n_effects.get(&ct) {
+                    *d
+                } else {
+                    0
                 }
-                _ => 0,
             })
             .sum();
         Some(base + n_effects_applied)

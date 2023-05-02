@@ -246,7 +246,7 @@ pub fn do_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> Ga
     if cv == CellStateVariant::Road {
         g = logistics_plane::update_logistics(pos, false, g);
     }
-    if let Some(new_delta) = celldata::leak_delta(cv, pos, &g.matrix) {
+    if let Some(new_delta) = celldata::leak_delta(cv, pos, &mut g.matrix) {
         g.resources.leak = g.resources.leak + new_delta;
         g.resources.heat_efficency = g.resources.tiles as f64 / g.resources.leak as f64;
     }

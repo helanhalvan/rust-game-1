@@ -26,14 +26,14 @@ pub enum LogisticsState {
     Available(Available),
 }
 
-pub fn new_plane(xmax: usize, ymax: usize) -> LogisticsPlane {
-    vec![vec![LogisticsState::None; xmax]; ymax]
+pub fn new_plane() -> LogisticsPlane {
+    hexgrid::new(LogisticsState::None)
 }
 
 pub fn has_worker(pos: hexgrid::Pos, g: &GameState) -> bool {
     connected_sources(pos, g)
         .into_iter()
-        .any(|i| can_use(pos, i, hexgrid::get(i, &g.matrix)))
+        .any(|i| can_use(pos, i, hexgrid::unsafe_get(i, &g.matrix)))
 }
 
 fn can_use(user: Pos, target: Pos, c: CellState) -> bool {
@@ -49,7 +49,7 @@ fn can_use(user: Pos, target: Pos, c: CellState) -> bool {
 pub fn return_borrows(pos: hexgrid::Pos, mut g: GameState) -> GameState {
     let a = get_available(pos, &mut g);
     g = a.borrows.iter().fold(g, |mut acc: GameState, (p, b)| {
-        let c0 = hexgrid::get(*p, &acc.matrix);
+        let c0 = hexgrid::get(*p, &mut acc.matrix);
         let b1 = resource::neg_packet(*b);
         let c1 = resource::add_packet(b1, c0).unwrap();
         hexgrid::set(*p, c1, &mut acc.matrix);
@@ -69,7 +69,7 @@ pub fn return_borrows(pos: hexgrid::Pos, mut g: GameState) -> GameState {
 pub fn return_lp(pos: hexgrid::Pos, mut g: GameState) -> GameState {
     let a = get_available(pos, &mut g);
     g = a.taken_lp.iter().fold(g, |mut acc: GameState, (p, b)| {
-        let c0 = hexgrid::get(*p, &acc.matrix);
+        let c0 = hexgrid::get(*p, &mut acc.matrix);
         let c1 = resource::add(resource::ResourceType::LogisticsPoints, c0, *b).unwrap();
         hexgrid::set(*p, c1, &mut acc.matrix);
         acc
@@ -103,7 +103,7 @@ pub fn try_borrow_resources(
 }
 
 fn get_available(src: Pos, g: &mut GameState) -> Available {
-    match hexgrid::get(src, &g.logistics_plane) {
+    match hexgrid::get(src, &mut g.logistics_plane) {
         LogisticsState::Available(a) => a,
         a => {
             unimplemented!("{:?}", a)
@@ -128,7 +128,7 @@ fn try_resources(
     vec.sort_by(|(a, _), (b, _)| a.cmp(b));
     for (distance, target) in vec {
         let p1 = resource::add_to_packet(resource::ResourceType::LogisticsPoints, -distance, p);
-        let target_cell = hexgrid::get(target, &g.matrix);
+        let target_cell = hexgrid::get(target, &mut g.matrix);
         dbg!(distance, target, p1);
         if let Some(new) = resource::add_packet(p1, target_cell) {
             hexgrid::set(target, new, &mut g.matrix);
@@ -182,7 +182,7 @@ where
 }
 
 fn connected_sources(pos: hexgrid::Pos, g: &GameState) -> Vec<hexgrid::Pos> {
-    match hexgrid::get(pos, &g.logistics_plane) {
+    match hexgrid::unsafe_get(pos, &g.logistics_plane) {
         LogisticsState::None => vec![],
         LogisticsState::Available(Available { locations, .. }) => locations.into_iter().collect(),
         LogisticsState::Source => {
@@ -192,7 +192,7 @@ fn connected_sources(pos: hexgrid::Pos, g: &GameState) -> Vec<hexgrid::Pos> {
 }
 
 pub fn update_logistics(pos: hexgrid::Pos, is_hub: bool, mut g: GameState) -> GameState {
-    let other_hubs = find_connected_hubs(pos, &g);
+    let other_hubs = find_connected_hubs(pos, &mut g);
     let connected_hubs = if is_hub {
         let mut tv: HashSet<_> = other_hubs.collect();
         tv.insert(pos);
@@ -201,7 +201,7 @@ pub fn update_logistics(pos: hexgrid::Pos, is_hub: bool, mut g: GameState) -> Ga
         other_hubs.collect()
     };
     let new_network = {
-        let mut other_roads: HashSet<_> = find_connected_roads(pos, &g).collect();
+        let mut other_roads: HashSet<_> = find_connected_roads(pos, &mut g).collect();
         other_roads.insert(pos);
         other_roads
     };
@@ -209,20 +209,23 @@ pub fn update_logistics(pos: hexgrid::Pos, is_hub: bool, mut g: GameState) -> Ga
     g
 }
 
-fn find_connected_roads(pos: hexgrid::Pos, g: &GameState) -> impl Iterator<Item = hexgrid::Pos> {
+fn find_connected_roads(
+    pos: hexgrid::Pos,
+    g: &mut GameState,
+) -> impl Iterator<Item = hexgrid::Pos> {
     hexgrid::get_connected(
         pos,
         |i| match i.into() {
             CellStateVariant::Road => true,
             _ => false,
         },
-        &g.matrix,
+        &mut g.matrix,
     )
     .into_iter()
     .map(|(p, _)| p)
 }
 
-fn find_connected_hubs(pos: hexgrid::Pos, g: &GameState) -> impl Iterator<Item = hexgrid::Pos> {
+fn find_connected_hubs(pos: hexgrid::Pos, g: &mut GameState) -> impl Iterator<Item = hexgrid::Pos> {
     hexgrid::get_connected(
         pos,
         |i| match i.into() {
@@ -230,7 +233,7 @@ fn find_connected_hubs(pos: hexgrid::Pos, g: &GameState) -> impl Iterator<Item =
             CellStateVariant::Road => true,
             _ => false,
         },
-        &g.matrix,
+        &mut g.matrix,
     )
     .into_iter()
     .filter(|(_p, c)| match (*c).into() {
@@ -250,26 +253,24 @@ fn add_to_close(
         lp
     } else {
         src.into_iter().fold(lp, |b, src_item| {
-            hexgrid::within(src_item, &(b.clone()), 2)
-                .filter_map(|i| i)
-                .fold(b, |mut acc, (pn, c)| match c {
-                    LogisticsState::None => {
-                        let new_cell = LogisticsState::Available(Available {
-                            locations: new_subset.clone(),
-                            borrows: HashMap::new(),
-                            taken_lp: HashMap::new(),
-                        });
-                        hexgrid::set(pn, new_cell, &mut acc);
-                        acc
-                    }
-                    LogisticsState::Source { .. } => acc,
-                    LogisticsState::Available(a) => {
-                        let locations = new_subset.union(&a.locations).cloned().collect();
-                        let new_cell = LogisticsState::Available(Available { locations, ..a });
-                        hexgrid::set(pn, new_cell, &mut acc);
-                        acc
-                    }
-                })
+            hexgrid::within(src_item, &mut (b.clone()), 2).fold(b, |mut acc, (pn, c)| match c {
+                LogisticsState::None => {
+                    let new_cell = LogisticsState::Available(Available {
+                        locations: new_subset.clone(),
+                        borrows: HashMap::new(),
+                        taken_lp: HashMap::new(),
+                    });
+                    hexgrid::set(pn, new_cell, &mut acc);
+                    acc
+                }
+                LogisticsState::Source { .. } => acc,
+                LogisticsState::Available(a) => {
+                    let locations = new_subset.union(&a.locations).cloned().collect();
+                    let new_cell = LogisticsState::Available(Available { locations, ..a });
+                    hexgrid::set(pn, new_cell, &mut acc);
+                    acc
+                }
+            })
         })
     }
 }

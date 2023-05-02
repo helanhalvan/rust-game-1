@@ -195,7 +195,7 @@ fn do_tick(p: hexgrid::Pos, c: celldata::CellState, mut g: GameState) -> GameSta
             ..
         } => {
             let con: Vec<(hexgrid::Pos, celldata::CellState)> =
-                hexgrid::get_connected(p, celldata::is_hot, &g.matrix)
+                hexgrid::get_connected(p, celldata::is_hot, &mut g.matrix)
                     .into_iter()
                     .filter(|(_p, i)| match i {
                         celldata::CellState {
@@ -233,7 +233,7 @@ fn do_tick(p: hexgrid::Pos, c: celldata::CellState, mut g: GameState) -> GameSta
             ..
         } => {
             let con: Vec<(hexgrid::Pos, celldata::CellState)> =
-                hexgrid::get_connected(p, celldata::is_hot, &g.matrix)
+                hexgrid::get_connected(p, celldata::is_hot, &mut g.matrix)
                     .into_iter()
                     .filter(|(_p, i)| match i {
                         celldata::CellState {
@@ -290,8 +290,8 @@ fn do_tick(p: hexgrid::Pos, c: celldata::CellState, mut g: GameState) -> GameSta
 pub fn run(mut g: GameState) -> GameState {
     let old_acton_machine = g.action_machine.clone();
     for v in old_acton_machine {
-        g = v.into_iter().fold(g, |acc, pos| {
-            let cell = hexgrid::get(pos, &acc.matrix);
+        g = v.into_iter().fold(g, |mut acc, pos| {
+            let cell = hexgrid::get(pos, &mut acc.matrix);
             do_tick(pos, cell, acc)
         })
     }

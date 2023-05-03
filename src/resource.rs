@@ -6,6 +6,7 @@ use crate::celldata;
 use crate::celldata::CellState;
 use crate::celldata::CellStateData;
 use crate::celldata::CellStateVariant;
+use crate::make_world;
 use itertools::Itertools;
 
 pub type ResourceValue = i32;
@@ -169,6 +170,18 @@ pub fn add(t: ResourceType, c: CellState, to_add: i32) -> Option<CellState> {
     add_packet(p, c)
 }
 
+pub fn to_key_value_display_amounts(cv: CellStateVariant, r: ResourceStockpile) -> PacketMap {
+    let mut ret = HashMap::new();
+    for i in all_resourcetypes() {
+        let value0 = get(i, r);
+        let value = scale(cv, i, value0);
+        if value > 0 {
+            ret.insert(i, value);
+        }
+    }
+    ret
+}
+
 pub fn to_key_value(r: ResourceStockpile) -> PacketMap {
     let mut ret = HashMap::new();
     for i in all_resourcetypes() {
@@ -178,6 +191,14 @@ pub fn to_key_value(r: ResourceStockpile) -> PacketMap {
         }
     }
     ret
+}
+
+fn scale(cv: CellStateVariant, _t: ResourceType, value: i32) -> i32 {
+    let factor = match cv {
+        CellStateVariant::Hidden => make_world::SCALING_WOOD,
+        _ => 1,
+    };
+    value / factor
 }
 
 pub fn from_key_value(map: PacketMap) -> ResourcePacket {
@@ -209,6 +230,7 @@ fn resource_variants() -> Vec<CellStateVariant> {
         CellStateVariant::Hub,
         CellStateVariant::Building,
         CellStateVariant::Hidden,
+        CellStateVariant::Unused,
     ]
 }
 
@@ -221,13 +243,13 @@ fn extra_data_variations(cv: CellStateVariant) -> Option<Vec<CellStateVariant>> 
 
 fn max(cv: CellStateVariant, t: ResourceType) -> i32 {
     match (cv, t) {
-        (CellStateVariant::Hub, ResourceType::LogisticsPoints) => 9,
-        (CellStateVariant::Hub, ResourceType::Wood) => 10,
+        (CellStateVariant::Hub, ResourceType::LogisticsPoints) => 18,
+        (CellStateVariant::Hub, ResourceType::Wood) => 50,
         (CellStateVariant::Hub, ResourceType::Builders) => 3,
         (CellStateVariant::Building, ResourceType::BuildTime) => 10,
-        (CellStateVariant::Building, ResourceType::Wood) => 100,
         (CellStateVariant::Building, ResourceType::Builders) => 2,
-        (CellStateVariant::Hidden, ResourceType::Wood) => 10,
+        (CellStateVariant::Hidden, ResourceType::Wood) => make_world::MAX_WOOD_RANGE,
+        (CellStateVariant::Unused, ResourceType::Wood) => make_world::MAX_WOOD_RANGE,
         _ => 0,
     }
 }
@@ -274,7 +296,7 @@ pub fn empty_packet() -> ResourcePacket {
     [nothing; ResourceType::CARDINALITY as usize]
 }
 
-fn empty_stockpile(cv: CellStateVariant) -> ResourceStockpile {
+pub fn empty_stockpile(cv: CellStateVariant) -> ResourceStockpile {
     let nothing = ResourceData { current: 0, max: 0 };
     let mut ret = [nothing; ResourceType::CARDINALITY as usize];
     for i in all_resourcetypes() {

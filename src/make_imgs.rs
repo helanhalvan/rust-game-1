@@ -46,6 +46,10 @@ pub fn make_imgs() {
 
         for i in vec {
             let path = make_path(i);
+            if let Ok(_) = fs::read(&path) {
+                print!("x");
+                continue;
+            }
             let surface = cairo::ImageSurface::create(Format::Rgb24.into(), width, height).unwrap();
             let mut context = cairo::Context::new(&surface).unwrap();
             context = set_color(context, background_color);
@@ -74,9 +78,14 @@ pub fn make_imgs() {
                     draw_icon(context, spacing * 8.0, Icon::OtherTriangle);
                 }
                 CellStateData::InProgress(actionmachine::InProgress::Pure(countdown))
-                | CellStateData::InProgress(actionmachine::InProgress::WithVariant(countdown, _)) =>
-                {
-                    draw_x(context, countdown as i32, spacing * 4.0, Icon::BrokenCircle);
+                | CellStateData::InProgress(actionmachine::InProgress::WithOther(countdown, _)) => {
+                    draw_x(
+                        context,
+                        countdown as i32,
+                        spacing * 4.0,
+                        Icon::BrokenCircle,
+                        6,
+                    );
                 }
                 CellStateData::Slot {
                     slot: celldata::Slot::Done,
@@ -100,18 +109,29 @@ pub fn make_imgs() {
                 }
                 CellStateData::Resource(Resource::Pure(resources))
                 | CellStateData::Resource(Resource::WithVariant(resources, _)) => {
-                    let map = resource::to_key_value(resources);
+                    let map = resource::to_key_value_display_amounts(i.variant, resources);
                     let number_of_resources = map.keys().count() as f64;
+                    let icon_radius = (spacing * 6.0) / number_of_resources;
+                    let columns = number_of_resources as i32 * 2;
                     match map.get(&resource::ResourceType::Builders) {
                         Some(value) => {
-                            context = draw_x(context, *value, spacing * 2.0, Icon::BrokenCircle);
+                            context =
+                                draw_x(context, *value, icon_radius, Icon::BrokenCircle, columns);
                             context.translate(width as f64 / number_of_resources, 0.0)
                         }
                         None => {}
                     };
                     match map.get(&resource::ResourceType::LogisticsPoints) {
                         Some(value) => {
-                            context = draw_x(context, *value, spacing * 2.0, Icon::Triangle);
+                            context = draw_x(context, *value, icon_radius, Icon::Triangle, columns);
+                            context.translate(width as f64 / number_of_resources, 0.0)
+                        }
+                        None => {}
+                    }
+
+                    match map.get(&resource::ResourceType::BuildTime) {
+                        Some(value) => {
+                            context = draw_x(context, *value, icon_radius, Icon::Triangle, columns);
                             context.translate(width as f64 / number_of_resources, 0.0)
                         }
                         None => {}
@@ -119,7 +139,7 @@ pub fn make_imgs() {
 
                     match map.get(&resource::ResourceType::Wood) {
                         Some(value) => {
-                            draw_x(context, *value, spacing * 2.0, Icon::OtherTriangle);
+                            draw_x(context, *value, icon_radius, Icon::OtherTriangle, columns);
                         }
                         None => {}
                     }
@@ -135,12 +155,12 @@ pub fn make_imgs() {
     }
 }
 
-fn draw_x(mut context: Context, x: i32, radius: f64, icon: Icon) -> Context {
+fn draw_x(mut context: Context, x: i32, radius: f64, icon: Icon, columns: i32) -> Context {
     let row_length = 3;
     let _ = context.save();
     let size = radius * 2.5;
-    context.translate(size, size);
-    if x > (row_length * 6) {
+    context.translate(size / 2.0, size * 0.75);
+    if x > (row_length * columns) {
         let _ = context.show_text(&x.to_string());
         return context;
     }
@@ -225,13 +245,13 @@ fn make_path(cellstate: celldata::CellState) -> String {
     let base = "./img/".to_string();
     let (dir, path) = match cellstate.data {
         CellStateData::InProgress(actionmachine::InProgress::Pure(countdown))
-        | CellStateData::InProgress(actionmachine::InProgress::WithVariant(countdown, _)) => {
+        | CellStateData::InProgress(actionmachine::InProgress::WithOther(countdown, _)) => {
             let dir = base + &cv.to_string() + "/inprogress/";
             (dir.clone(), dir + &countdown.to_string() + &".png")
         }
         celldata::CellStateData::Resource(Resource::Pure(r))
         | celldata::CellStateData::Resource(Resource::WithVariant(r, _)) => {
-            let name = resource::to_key_value(r)
+            let name = resource::to_key_value_display_amounts(cv, r)
                 .into_iter()
                 .sorted()
                 .map(|(t, v)| format!("{:?}", t) + ":" + &v.to_string())

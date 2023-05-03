@@ -23,7 +23,14 @@ pub enum OnDoneData {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InProgress {
     Pure(InProgressWait),
-    WithVariant(InProgressWait, CellStateVariant),
+    WithOther(InProgressWait, Other),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Other {
+    CellStateVariant(CellStateVariant),
+    ResourceStockpile(resource::ResourceStockpile),
+    CvAndRS(CellStateVariant, resource::ResourceStockpile),
 }
 
 // for now the main point of prio is to ensure
@@ -56,9 +63,22 @@ pub fn new_in_progress_with_variant(
     wait: InProgressWait,
     cv2: CellStateVariant,
 ) -> CellState {
+    new_in_progress_with_other(cv, wait, Other::CellStateVariant(cv2))
+}
+
+pub fn new_in_progress_with_variant_and_resource(
+    cv: CellStateVariant,
+    wait: InProgressWait,
+    cv2: CellStateVariant,
+    res: resource::ResourceStockpile,
+) -> CellState {
+    new_in_progress_with_other(cv, wait, Other::CvAndRS(cv2, res))
+}
+
+fn new_in_progress_with_other(cv: CellStateVariant, wait: InProgressWait, oth: Other) -> CellState {
     CellState {
         variant: cv,
-        data: CellStateData::InProgress(InProgress::WithVariant(wait, cv2)),
+        data: CellStateData::InProgress(InProgress::WithOther(wait, oth)),
     }
 }
 
@@ -120,17 +140,13 @@ fn do_in_progress(
 ) -> GameState {
     match ip {
         InProgress::Pure(1) => do_pure_progress_done(p, cv, g),
-        InProgress::WithVariant(1, cv2) => do_progress_done_extra_variant(p, cv, cv2, g),
+        InProgress::WithOther(1, cv2) => do_progress_done_other(p, cv, cv2, g),
         InProgress::Pure(x) => {
             hexgrid::set(p, new_in_progress(cv, x - 1), &mut g.matrix);
             g
         }
-        InProgress::WithVariant(x, cv2) => {
-            hexgrid::set(
-                p,
-                new_in_progress_with_variant(cv, x - 1, cv2),
-                &mut g.matrix,
-            );
+        InProgress::WithOther(x, cv2) => {
+            hexgrid::set(p, new_in_progress_with_other(cv, x - 1, cv2), &mut g.matrix);
             g
         }
     }
@@ -166,16 +182,16 @@ fn do_pure_progress_done(p: hexgrid::Pos, cv: CellStateVariant, mut g: GameState
     }
 }
 
-fn do_progress_done_extra_variant(
+fn do_progress_done_other(
     p: hexgrid::Pos,
     cv: celldata::CellStateVariant,
-    cv2: celldata::CellStateVariant,
+    oth: Other,
     mut g: GameState,
 ) -> GameState {
-    g = match (cv, cv2) {
-        (celldata::CellStateVariant::Building, new_cv) => building::finalize_build(new_cv, p, g),
+    g = match cv {
+        celldata::CellStateVariant::Building => building::finalize_build(oth, p, g),
         _ => {
-            println!("unexpected {:?}{:?}{:?}", p, cv, cv2);
+            println!("unexpected {:?}{:?}{:?}", p, cv, oth);
             unimplemented!()
         }
     };

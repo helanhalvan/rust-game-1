@@ -137,7 +137,7 @@ impl Application for GameState {
             y: start_y,
         };
         let cv = celldata::CellStateVariant::Hub;
-        g = building::do_build(cv, p, g);
+        g = building::do_build(actionmachine::Other::CellStateVariant(cv), p, g);
         let mut start_hub = hexgrid::get(p, &mut g.matrix);
         start_hub = resource::add(resource::ResourceType::Wood, start_hub, 10).unwrap();
         hexgrid::set(p, start_hub, &mut g.matrix);
@@ -276,10 +276,13 @@ impl Application for GameState {
             button(zoom_out_content).on_press(Message::Zoom(true)),
             button(zoom_in_content).on_press(Message::Zoom(false)),
         ]);
-        let ui_misc = crate::Element::from(row![
-            visualize_cell::to_text(format!("{:?}", self.io_cache.top_left_pos).to_string()),
-            visualize_cell::to_text(format!("{:?}", self.io_cache.latest_cursor).to_string()),
-        ]);
+        let ui_misc = crate::Element::from(row![visualize_cell::to_text(
+            format!(
+                "{:?}",
+                self.io_cache.view_cells_x * self.io_cache.view_cells_y
+            )
+            .to_string()
+        ),]);
         let content =
             iced::widget::Column::with_children(vec![matrix, resources, buttom_buttons, ui_misc]);
 

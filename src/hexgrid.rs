@@ -261,9 +261,6 @@ pub fn get<T: Clone + CellGen<GenContext = C>, C: Clone>(p: Pos, m: &mut Hexgrid
     chunk[in_chunk_key.x][in_chunk_key.y].clone()
 }
 
-// this version of get does not persist values pulled out of Hexgrid
-// so repeated get-calls might result in different returned values
-// when pulling data from un-initalized chunks
 pub fn unsafe_get<T: Clone + CellGen<GenContext = C>, C: Clone>(p: Pos, m: &Hexgrid<T, C>) -> T {
     let (chunk_key, in_chunk_key) = to_chunk_keys(p);
     if let Some(chunk) = m.chunks.get(&chunk_key) {

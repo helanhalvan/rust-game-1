@@ -1,8 +1,8 @@
 use std::{cmp::min, collections::HashMap};
 
 use crate::{
-    actionmachine,
-    celldata::{self, CellState, CellStateVariant},
+    actionmachine::{self, Other},
+    celldata::{self, CellState, CellStateData, CellStateVariant},
     hexgrid::{self},
     logistics_plane::{self, LogisticsState},
     resource, GameState,
@@ -85,13 +85,19 @@ fn has_buildtime() -> Vec<CellStateVariant> {
 
 fn buildtime(cv: CellStateVariant) -> Option<actionmachine::InProgressWait> {
     match cv {
-        CellStateVariant::Unused => Some(2),
         CellStateVariant::Hot => Some(4),
         CellStateVariant::Feeder => Some(1),
         CellStateVariant::Seller => Some(1),
         CellStateVariant::Insulation => Some(2),
         CellStateVariant::WoodCutter => Some(3),
         CellStateVariant::Road => Some(1),
+        _ => None,
+    }
+}
+
+fn buildtime_keep_res(cv: CellStateVariant) -> Option<actionmachine::InProgressWait> {
+    match cv {
+        CellStateVariant::Unused => Some(2),
         _ => None,
     }
 }
@@ -153,7 +159,7 @@ pub fn do_build_progress(
         }
     }
     if (progress + pre_progress) == done_threshold {
-        finalize_build(cv2, p, g)
+        finalize_build(actionmachine::Other::CellStateVariant(cv2), p, g)
     } else {
         dbg!((c, progress));
         let c1 = resource::add(resource::ResourceType::BuildTime, c, progress).unwrap();
@@ -175,22 +181,33 @@ pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameS
     if let Some(new_cell) = menu_variant_transition(cv) {
         hexgrid::set(pos, new_cell, &mut g.matrix);
         g
-    } else if let Some(b) = buildtime(cv) {
-        let new_cell =
-            actionmachine::new_in_progress_with_variant(CellStateVariant::Building, b, cv);
-        hexgrid::set(pos, new_cell, &mut g.matrix);
-        g = use_builder(pos, g);
-        g.action_machine =
-            actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
-        g
-    } else if let Some(new_cell) = buildcost_cell(cv) {
-        hexgrid::set(pos, new_cell, &mut g.matrix);
-        g = use_builder(pos, g);
-        g.action_machine =
-            actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
-        g
     } else {
-        unimplemented!("{:?}", (cv, pos))
+        let new_cell = if let Some(b) = buildtime(cv) {
+            actionmachine::new_in_progress_with_variant(CellStateVariant::Building, b, cv)
+        } else if let Some(new_cell) = buildcost_cell(cv) {
+            new_cell
+        } else if let Some(b) = buildtime_keep_res(cv) {
+            let old_res = match hexgrid::get(pos, &mut g.matrix) {
+                CellState {
+                    variant: CellStateVariant::Hidden,
+                    data: CellStateData::Resource(resource::Resource::Pure(res)),
+                } => res,
+                a => todo!("{:?}", a),
+            };
+            actionmachine::new_in_progress_with_variant_and_resource(
+                CellStateVariant::Building,
+                b,
+                cv,
+                old_res,
+            )
+        } else {
+            unimplemented!("{:?}", (cv, pos))
+        };
+        g = use_builder(pos, g);
+        g.action_machine =
+            actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
+        hexgrid::set(pos, new_cell, &mut g.matrix);
+        g
     }
 }
 
@@ -208,20 +225,32 @@ pub fn statespace() -> celldata::Statespace {
     ret
 }
 
-pub fn finalize_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameState {
+pub fn finalize_build(oth: actionmachine::Other, pos: hexgrid::Pos, mut g: GameState) -> GameState {
     g = logistics_plane::return_borrows(pos, g);
-    do_build(cv, pos, g)
+    g = logistics_plane::return_lp(pos, g);
+    do_build(oth, pos, g)
 }
 
-pub fn do_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameState {
+pub fn do_build(oth: actionmachine::Other, pos: hexgrid::Pos, mut g: GameState) -> GameState {
+    let cv = match oth {
+        actionmachine::Other::CellStateVariant(cv) => cv,
+        actionmachine::Other::CvAndRS(cv, _) => cv,
+        a => todo!("{:?}", a),
+    };
     g.action_machine = actionmachine::remove(g.action_machine, pos, CellStateVariant::Building);
     g.action_machine = actionmachine::maybe_insert(g.action_machine, pos, cv);
     let new_cell = match cv {
         a @ (CellStateVariant::Insulation
         | CellStateVariant::Feeder
-        | CellStateVariant::Unused
         | CellStateVariant::Seller
         | CellStateVariant::Road) => celldata::unit_state(a),
+        CellStateVariant::Unused => {
+            let res = match oth {
+                actionmachine::Other::CvAndRS(_, res) => res,
+                a => todo!("{:?}", a),
+            };
+            resource::new_pure_stockpile(cv, resource::to_key_value(res))
+        }
         CellStateVariant::Hot => CellState {
             variant: cv,
             data: celldata::CellStateData::Slot {
@@ -239,6 +268,7 @@ pub fn do_build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> Ga
             unimplemented!()
         }
     };
+    dbg!(new_cell);
     hexgrid::set(pos, new_cell, &mut g.matrix);
     if cv == CellStateVariant::Hub {
         g = logistics_plane::update_logistics(pos, true, g);

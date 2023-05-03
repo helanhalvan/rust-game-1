@@ -11,12 +11,16 @@ use crate::{
     resource,
 };
 
+pub const MAX_WOOD: i32 = 6;
+pub const SCALING_WOOD: i32 = 16;
+pub const MAX_WOOD_RANGE: i32 = MAX_WOOD * SCALING_WOOD;
+
 impl CellGen for celldata::CellState {
     type GenContext = GenContext;
 
     fn new_chunk(p: hexgrid::Pos, c: &mut Self::GenContext) -> hexgrid::Matrix<Self> {
         let (chunk, _) = hexgrid::to_chunk_keys(p);
-        let filename = format!("{}_{}.png", chunk.x, chunk.y);
+        //let filename = format!("{}_{}.png", chunk.x, chunk.y);
         let map = PlaneMapBuilder::<_, 2>::new(c.main_noise.clone())
             .set_size(hexgrid::CHUNK_SIZE, hexgrid::CHUNK_SIZE)
             .set_x_bounds(
@@ -28,12 +32,14 @@ impl CellGen for celldata::CellState {
                 (chunk.y + CHUNK_SIZE as i32) as f64 * 0.01,
             )
             .build();
-        map.write_to_file(&filename);
+        //map.write_to_file(&filename);
         let mut ret = vec![];
         for i in 0..CHUNK_SIZE {
             let mut row = vec![];
             for j in 0..CHUNK_SIZE {
-                let wood = (map.get_value(i, j) * 6.0).round().clamp(0.0, 6.0) as i32;
+                let wood = (map.get_value(i, j) * MAX_WOOD_RANGE as f64)
+                    .round()
+                    .clamp(0.0, MAX_WOOD_RANGE as f64) as i32;
                 row.push(resource::new_pure_stockpile(
                     celldata::CellStateVariant::Hidden,
                     HashMap::from([(resource::ResourceType::Wood, wood)]),

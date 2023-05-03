@@ -190,7 +190,7 @@ pub fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameS
             actionmachine::maybe_insert(g.action_machine, pos, CellStateVariant::Building);
         g
     } else {
-        unimplemented!("{:?}", (g, cv, pos))
+        unimplemented!("{:?}", (cv, pos))
     }
 }
 

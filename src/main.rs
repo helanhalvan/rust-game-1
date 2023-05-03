@@ -44,7 +44,7 @@ pub fn main() {
 
 pub type WindowPos = iced_native::Point;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GameState {
     matrix: hexgrid::Board,
     logistics_plane: logistics_plane::LogisticsPlane,
@@ -91,7 +91,7 @@ impl Application for GameState {
     fn new(_flags: ()) -> (Self, Command<Message>) {
         let start_x: i32 = 0;
         let start_y: i32 = 0;
-        let m1 = hexgrid::new(hexgrid::EmptyContext::None);
+        let m1 = make_world::new();
         let mut g = GameState {
             matrix: m1,
             logistics_plane: logistics_plane::new_plane(),
@@ -126,7 +126,7 @@ impl Application for GameState {
         let cv = celldata::CellStateVariant::Hub;
         g = building::do_build(cv, p, g);
         let mut start_hub = hexgrid::get(p, &mut g.matrix);
-        start_hub = resource::add(resource::ResourceType::Wood, start_hub, 100).unwrap();
+        start_hub = resource::add(resource::ResourceType::Wood, start_hub, 10).unwrap();
         hexgrid::set(p, start_hub, &mut g.matrix);
         (g, Command::none())
     }
@@ -171,6 +171,12 @@ impl Application for GameState {
             })) => {
                 (*self).io_cache.view_cells_x = width as i32 / visualize_cell::CELL_X_SIZE as i32;
                 (*self).io_cache.view_cells_y = height as i32 / visualize_cell::CELL_Y_SIZE as i32;
+                hexgrid::touch_all_chunks(
+                    &mut self.matrix,
+                    self.io_cache.top_left_hex,
+                    self.io_cache.view_cells_x - 1,
+                    self.io_cache.view_cells_y - 1,
+                );
             }
             Message::NativeEvent(_) => {}
         }

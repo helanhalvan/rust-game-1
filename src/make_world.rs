@@ -1,41 +1,105 @@
-use worldgen::noise::perlin::PerlinNoise;
-use worldgen::noisemap::{NoiseMap, NoiseMapGenerator, Seed, Size, Step};
-use worldgen::world::tile::{Constraint, ConstraintType};
-use worldgen::world::{Tile, World};
+use std::collections::HashMap;
+
+use noise::{utils::*, Fbm, Perlin, Worley};
+
+use crate::{
+    celldata,
+    hexgrid::{self, CellGen, CHUNK_SIZE},
+    resource,
+};
+
+impl CellGen for celldata::CellState {
+    type GenContext = GenContext;
+
+    fn new_chunk(p: hexgrid::Pos, c: &mut Self::GenContext) -> hexgrid::Matrix<Self> {
+        let (chunk, _) = hexgrid::to_chunk_keys(p);
+        let filename = format!("{}_{}.png", chunk.x, chunk.y);
+        let map = PlaneMapBuilder::<_, 2>::new(c.main_noise.clone())
+            .set_size(hexgrid::CHUNK_SIZE, hexgrid::CHUNK_SIZE)
+            .set_x_bounds(
+                chunk.x as f64 * 0.01,
+                (chunk.x + CHUNK_SIZE as i32) as f64 * 0.01,
+            )
+            .set_y_bounds(
+                chunk.y as f64 * 0.01,
+                (chunk.y + CHUNK_SIZE as i32) as f64 * 0.01,
+            )
+            .build();
+        map.write_to_file(&filename);
+        let mut ret = vec![];
+        for i in 0..CHUNK_SIZE {
+            let mut row = vec![];
+            for j in 0..CHUNK_SIZE {
+                let wood = (map.get_value(i, j) * 6.0).round().clamp(0.0, 6.0) as i32;
+                row.push(resource::new_pure_stockpile(
+                    celldata::CellStateVariant::Hidden,
+                    HashMap::from([(resource::ResourceType::Wood, wood)]),
+                ))
+            }
+            ret.push(row)
+        }
+        ret
+    }
+}
+
+#[derive(Clone)]
+pub struct GenContext {
+    main_noise: Fbm<Worley>,
+}
+
+pub fn new() -> hexgrid::Hexgrid<celldata::CellState, GenContext> {
+    hexgrid::new(
+        GenContext {
+            main_noise: Fbm::<Worley>::default(),
+        },
+        celldata::unit_state(celldata::CellStateVariant::OutOfBounds),
+    )
+}
 
 pub fn test() {
-    let noise = PerlinNoise::new();
+    let fbm = Fbm::<Perlin>::default();
 
-    let nm1 = NoiseMap::new(noise)
-        .set(Seed::of("blarg"))
-        .set(Step::of(0.005, 0.005));
+    PlaneMapBuilder::<_, 2>::new(fbm)
+        .set_size(1000, 1000)
+        .set_x_bounds(-5.0, 5.0)
+        .set_y_bounds(-5.0, 5.0)
+        .build()
+        .write_to_file("fbm_perlin.png");
 
-    let nm2 = NoiseMap::new(noise)
-        .set(Seed::of("Hello!asdas"))
-        .set(Step::of(0.05, 0.05));
+    let fbm = Fbm::<Worley>::default();
 
-    let nm = Box::new(nm1 + nm2 * 3);
+    PlaneMapBuilder::<_, 2>::new(fbm.clone())
+        .set_size(1000, 1000)
+        .set_x_bounds(-5.0, 5.0)
+        .set_y_bounds(-5.0, 5.0)
+        .build()
+        .write_to_file("fbm_worley1.png");
 
-    let world = World::new()
-        .set(Size::of(80, 50))
-        // Water
-        .add(Tile::new('~').when(worldgen::constraint!(nm.clone(), < -0.1)))
-        // Grass
-        .add(Tile::new(',').when(worldgen::constraint!(nm.clone(), < 0.45)))
-        // Mountains
-        .add(Tile::new('^').when(worldgen::constraint!(nm.clone(), > 0.8)))
-        // Hills
-        .add(Tile::new('n'));
+    PlaneMapBuilder::<_, 2>::new(fbm.clone())
+        .set_size(1000, 1000)
+        .set_x_bounds(0.0, 5.0)
+        .set_y_bounds(0.0, 5.0)
+        .build()
+        .write_to_file("fbm_worley2.png");
+    PlaneMapBuilder::<_, 2>::new(fbm.clone())
+        .set_size(1000, 1000)
+        .set_x_bounds(-5.0, 0.0)
+        .set_y_bounds(-5.0, 0.0)
+        .build()
+        .write_to_file("fbm_worley3.png");
+    PlaneMapBuilder::<_, 2>::new(fbm.clone())
+        .set_size(1000, 1000)
+        .set_x_bounds(-5.0, 0.0)
+        .set_y_bounds(0.0, 5.0)
+        .build()
+        .write_to_file("fbm_worley4.png");
 
-    for row in world.generate(0, 0).iter() {
-        for val in row.iter() {
-            for c in val.iter() {
-                print!("{}", c);
-            }
+    let fbm = Fbm::<Fbm<Perlin>>::default();
 
-            println!("");
-        }
-
-        println!("");
-    }
+    PlaneMapBuilder::<_, 2>::new(fbm)
+        .set_size(1000, 1000)
+        .set_x_bounds(-5.0, 5.0)
+        .set_y_bounds(-5.0, 5.0)
+        .build()
+        .write_to_file("fbm_fbm_perlin.png");
 }

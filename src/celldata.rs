@@ -78,7 +78,7 @@ pub enum CellStateVariant {
     Building,
     Hub,
     Road,
-    OutOfBounds, //DEAD
+    OutOfBounds,
     Industry,
     Infrastructure,
     Extract,

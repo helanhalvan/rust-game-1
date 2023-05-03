@@ -43,7 +43,7 @@ pub fn to_gui<'a>(
 ) -> Element<'a, Message> {
     let imgs: &ImgBuffer = &g.img_buffer;
     let content = match building::has_actions(pos, s, g) {
-        Some(actions) => render_action_cell(actions, pos),
+        Some(actions) => render_action_cell(actions, pos, imgs, s),
         None => match has_image(s, imgs) {
             Some(img) => crate::Element::from(image::viewer(img.clone())),
             None => backup_formatter(s),
@@ -63,13 +63,15 @@ pub fn to_gui<'a>(
 fn render_action_cell<'a>(
     actions: Vec<celldata::CellStateVariant>,
     pos: hexgrid::Pos,
+    imgs: &ImgBuffer,
+    s: celldata::CellState,
 ) -> Element<'a, Message> {
     let layout = if actions.len() > 3 {
         to_rectangle(actions, 4, 2)
     } else {
         to_rectangle(actions, 3, 1)
     };
-    let grid = layout
+    let mut grid: Vec<_> = layout
         .iter()
         .map(|v| {
             crate::Element::from(iced::widget::row(
@@ -84,6 +86,11 @@ fn render_action_cell<'a>(
             ))
         })
         .collect();
+    let top = match has_image(s, imgs) {
+        Some(img) => crate::Element::from(image::viewer(img.clone())),
+        None => to_text(format!("{:?}", s.variant).to_string()),
+    };
+    grid.push(top);
     crate::Element::from(iced::widget::column(grid))
 }
 

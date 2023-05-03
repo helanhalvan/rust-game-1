@@ -160,7 +160,7 @@ fn do_pure_progress_done(p: hexgrid::Pos, cv: CellStateVariant, mut g: GameState
             g
         }
         _a => {
-            println!("unexpected {:?}{:?}{:?}", g, p, cv);
+            println!("unexpected {:?}{:?}", p, cv);
             unimplemented!()
         }
     }
@@ -175,7 +175,7 @@ fn do_progress_done_extra_variant(
     g = match (cv, cv2) {
         (celldata::CellStateVariant::Building, new_cv) => building::finalize_build(new_cv, p, g),
         _ => {
-            println!("unexpected {:?}{:?}{:?}{:?}", g, p, cv, cv2);
+            println!("unexpected {:?}{:?}{:?}", p, cv, cv2);
             unimplemented!()
         }
     };
@@ -280,7 +280,7 @@ fn do_tick(p: hexgrid::Pos, c: celldata::CellState, mut g: GameState) -> GameSta
                 celldata::CellStateData::Resource(resource::Resource::WithVariant(resources, goal_cv)),
         } => g = building::do_build_progress(c, p, resources, goal_cv, g),
         a => {
-            println!("unexpected {:?}{:?}{:?}", g, p, a);
+            println!("unexpected {:?}{:?}", p, a);
             unimplemented!()
         }
     };

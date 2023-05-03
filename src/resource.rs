@@ -47,11 +47,25 @@ pub fn new_hub() -> CellState {
     stockpile_to_cell(CellStateVariant::Hub, r)
 }
 
+pub fn new_pure_stockpile(
+    cv: CellStateVariant,
+    data: HashMap<ResourceType, ResourceValue>,
+) -> CellState {
+    stockpile_to_cell(cv, map_to_stockpile(cv, data))
+}
+
 pub fn new_stockpile(
     cv: CellStateVariant,
     data: HashMap<ResourceType, ResourceValue>,
     to: CellStateVariant,
 ) -> CellState {
+    stockpile_to_cell_with_extra_variant(cv, map_to_stockpile(cv, data), to)
+}
+
+fn map_to_stockpile(
+    cv: CellStateVariant,
+    data: HashMap<ResourceType, ResourceValue>,
+) -> ResourceStockpile {
     let stockpile = data.into_iter().fold(empty_stockpile(cv), |acc, (t, d)| {
         set(
             t,
@@ -62,7 +76,7 @@ pub fn new_stockpile(
             acc,
         )
     });
-    stockpile_to_cell_with_extra_variant(cv, stockpile, to)
+    stockpile
 }
 
 fn stockpile_to_cell_with_extra_variant(
@@ -191,7 +205,11 @@ fn add_packet_stockpile(p: ResourcePacket, mut s: ResourceStockpile) -> Option<R
 }
 
 fn resource_variants() -> Vec<CellStateVariant> {
-    vec![CellStateVariant::Hub, CellStateVariant::Building]
+    vec![
+        CellStateVariant::Hub,
+        CellStateVariant::Building,
+        CellStateVariant::Hidden,
+    ]
 }
 
 fn extra_data_variations(cv: CellStateVariant) -> Option<Vec<CellStateVariant>> {
@@ -204,11 +222,12 @@ fn extra_data_variations(cv: CellStateVariant) -> Option<Vec<CellStateVariant>> 
 fn max(cv: CellStateVariant, t: ResourceType) -> i32 {
     match (cv, t) {
         (CellStateVariant::Hub, ResourceType::LogisticsPoints) => 9,
-        (CellStateVariant::Hub, ResourceType::Wood) => 100,
+        (CellStateVariant::Hub, ResourceType::Wood) => 10,
         (CellStateVariant::Hub, ResourceType::Builders) => 3,
         (CellStateVariant::Building, ResourceType::BuildTime) => 10,
         (CellStateVariant::Building, ResourceType::Wood) => 100,
         (CellStateVariant::Building, ResourceType::Builders) => 2,
+        (CellStateVariant::Hidden, ResourceType::Wood) => 10,
         _ => 0,
     }
 }

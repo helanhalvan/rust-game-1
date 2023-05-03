@@ -29,13 +29,13 @@ pub enum LogisticsState {
 impl hexgrid::CellGen for LogisticsState {
     type GenContext = hexgrid::EmptyContext;
 
-    fn new_cell(_p: Pos, _c: &mut Self::GenContext) -> Self {
-        LogisticsState::None
+    fn new_chunk(_p: Pos, _c: &mut Self::GenContext) -> hexgrid::Matrix<Self> {
+        hexgrid::chunk_from_example(LogisticsState::None)
     }
 }
 
 pub fn new_plane() -> LogisticsPlane {
-    hexgrid::new(hexgrid::EmptyContext::None)
+    hexgrid::new(hexgrid::EmptyContext::None, LogisticsState::None)
 }
 
 pub fn has_worker(pos: hexgrid::Pos, g: &GameState) -> bool {

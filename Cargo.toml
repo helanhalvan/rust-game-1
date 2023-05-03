@@ -15,4 +15,4 @@ palette = "0.7.1"
 rand = "0.8.5"
 enum-iterator = "1.4.0"
 itertools = "0.10.5"
-worldgen = "0.5.3"
+noise = { version =  "0.8.2", features = ["images"] }

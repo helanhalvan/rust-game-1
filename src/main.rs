@@ -12,7 +12,7 @@ pub mod visualize_cell;
 use iced::executor;
 use iced::widget::{button, container};
 use iced::{Application, Command, Length, Settings};
-use iced_native::row;
+use iced_native::{row, subscription};
 use widget::Element;
 
 mod widget {
@@ -25,12 +25,14 @@ mod widget {
     //pub type Button<'a, Message> = iced::widget::Button<'a, Message, Renderer>;
 }
 
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::time::Duration;
 use std::{env, vec};
 
 pub fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 1 {
-        let _ = GameState::run(Settings {
+        let _ = AppState::run(Settings {
             antialiasing: true,
             ..Settings::default()
         });
@@ -52,6 +54,17 @@ pub struct GameState {
     action_machine: actionmachine::ActionMachine,
     img_buffer: visualize_cell::ImgBuffer,
     io_cache: IOCache,
+}
+
+pub struct AppState {
+    game_state: GameState,
+    queues: Queues,
+}
+
+#[derive(Debug)]
+pub struct Queues {
+    send_img_job: Sender<celldata::CellState>,
+    get_img_done: Receiver<ImgDoneEvent>,
 }
 
 #[derive(Debug, Clone)]
@@ -81,19 +94,39 @@ pub enum Message {
     EndTurn,
     Zoom(bool),
     NativeEvent(iced_native::Event),
+    Tick(iced::time::Instant),
 }
 
-impl Application for GameState {
+#[derive(Debug, Clone)]
+pub struct ImgDoneEvent {
+    path: String,
+    data: celldata::CellState,
+}
+
+fn read_reply_loop(rx: Receiver<celldata::CellState>, tx: Sender<ImgDoneEvent>) {
+    loop {
+        let data = rx.recv().unwrap();
+        let path = make_imgs::make_image(data);
+        tx.send(ImgDoneEvent { path, data }).unwrap();
+    }
+}
+
+impl Application for AppState {
     type Executor = executor::Default;
     type Message = Message;
     type Theme = css::Theme;
     type Flags = ();
 
     fn subscription(&self) -> iced::Subscription<Self::Message> {
-        iced_native::subscription::events().map(Message::NativeEvent)
+        let a = iced_native::subscription::events().map(Message::NativeEvent);
+        let b = iced::time::every(iced::time::Duration::from_millis(1000)).map(Message::Tick);
+        subscription::Subscription::batch(vec![a, b])
     }
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
+        let (s1, r1) = mpsc::channel();
+        let (s2, r2) = mpsc::channel();
+        std::thread::spawn(move || read_reply_loop(r1, s2));
         let start_x: i32 = 0;
         let start_y: i32 = 0;
         let start_view_cells_x = 7;
@@ -141,7 +174,14 @@ impl Application for GameState {
         let mut start_hub = hexgrid::get(p, &mut g.matrix);
         start_hub = resource::add(resource::ResourceType::Wood, start_hub, 10).unwrap();
         hexgrid::set(p, start_hub, &mut g.matrix);
-        (g, Command::none())
+        let a = AppState {
+            game_state: g,
+            queues: Queues {
+                send_img_job: s1,
+                get_img_done: r2,
+            },
+        };
+        (a, Command::none())
     }
 
     fn title(&self) -> String {
@@ -150,85 +190,100 @@ impl Application for GameState {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::Build(t, pos) => *self = building::build(t, pos, self.clone()),
+            Message::Build(t, pos) => {
+                self.game_state = building::build(t, pos, self.game_state.clone())
+            }
             Message::EndTurn => {
-                *self = actionmachine::run(self.clone());
+                self.game_state = actionmachine::run(self.game_state.clone());
             }
             Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::CursorMoved {
                 position,
             })) => {
-                if (*self).io_cache.is_mousedown == true {
-                    let old_p = (*self).io_cache.latest_cursor;
+                if self.game_state.io_cache.is_mousedown == true {
+                    let old_p = self.game_state.io_cache.latest_cursor;
                     let delta = old_p - position;
-                    (*self).io_cache.top_left_pos = (*self).io_cache.top_left_pos + delta;
-                    re_calc_cells_in_view(self)
+                    self.game_state.io_cache.top_left_pos =
+                        self.game_state.io_cache.top_left_pos + delta;
+                    re_calc_cells_in_view(&mut self.game_state)
                 }
-                (*self).io_cache.latest_cursor = position;
+                self.game_state.io_cache.latest_cursor = position;
             }
             Message::Zoom(is_out) => {
                 if is_out {
-                    (*self).io_cache.cell_x_size =
-                        (*self).io_cache.cell_x_size / visualize_cell::ZOOM_FACTOR;
-                    (*self).io_cache.cell_y_size =
-                        (*self).io_cache.cell_y_size / visualize_cell::ZOOM_FACTOR;
+                    self.game_state.io_cache.cell_x_size =
+                        self.game_state.io_cache.cell_x_size / visualize_cell::ZOOM_FACTOR;
+                    self.game_state.io_cache.cell_y_size =
+                        self.game_state.io_cache.cell_y_size / visualize_cell::ZOOM_FACTOR;
                 } else {
-                    (*self).io_cache.cell_x_size =
-                        (*self).io_cache.cell_x_size * visualize_cell::ZOOM_FACTOR;
-                    (*self).io_cache.cell_y_size =
-                        (*self).io_cache.cell_y_size * visualize_cell::ZOOM_FACTOR;
+                    self.game_state.io_cache.cell_x_size =
+                        self.game_state.io_cache.cell_x_size * visualize_cell::ZOOM_FACTOR;
+                    self.game_state.io_cache.cell_y_size =
+                        self.game_state.io_cache.cell_y_size * visualize_cell::ZOOM_FACTOR;
                 }
-                re_calc_cells_in_view(self)
+                re_calc_cells_in_view(&mut self.game_state)
             }
             Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::ButtonPressed(
                 iced::mouse::Button::Left,
             ))) => {
-                (*self).io_cache.is_mousedown = true;
+                self.game_state.io_cache.is_mousedown = true;
             }
             Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
                 iced::mouse::Button::Left,
             ))) => {
-                (*self).io_cache.is_mousedown = false;
+                self.game_state.io_cache.is_mousedown = false;
             }
             Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::CursorLeft)) => {
-                (*self).io_cache.is_mousedown = false;
+                self.game_state.io_cache.is_mousedown = false;
             }
             Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::WheelScrolled {
                 delta: iced_native::mouse::ScrollDelta::Lines { y, .. },
             })) => {
                 let d = y.abs() * visualize_cell::ZOOM_FACTOR;
                 if y < 0.0 {
-                    (*self).io_cache.cell_x_size = (*self).io_cache.cell_x_size / d;
-                    (*self).io_cache.cell_y_size = (*self).io_cache.cell_y_size / d;
+                    self.game_state.io_cache.cell_x_size = self.game_state.io_cache.cell_x_size / d;
+                    self.game_state.io_cache.cell_y_size = self.game_state.io_cache.cell_y_size / d;
                 } else {
-                    (*self).io_cache.cell_x_size = (*self).io_cache.cell_x_size * d;
-                    (*self).io_cache.cell_y_size = (*self).io_cache.cell_y_size * d;
+                    self.game_state.io_cache.cell_x_size = self.game_state.io_cache.cell_x_size * d;
+                    self.game_state.io_cache.cell_y_size = self.game_state.io_cache.cell_y_size * d;
                 }
-                re_calc_cells_in_view(self)
+                re_calc_cells_in_view(&mut self.game_state)
             }
             Message::NativeEvent(iced::Event::Window(iced::window::Event::Resized {
                 width,
                 height,
             })) => {
-                (*self).io_cache.width_px = width as i32;
-                (*self).io_cache.height_px = height as i32;
-                re_calc_cells_in_view(self)
+                self.game_state.io_cache.width_px = width as i32;
+                self.game_state.io_cache.height_px = height as i32;
+                re_calc_cells_in_view(&mut self.game_state)
             }
             Message::NativeEvent(_) => {}
+            Message::Tick(a) => {
+                while let Ok(new) = self
+                    .queues
+                    .get_img_done
+                    .recv_timeout(Duration::from_millis(0))
+                {
+                    self.game_state
+                        .img_buffer
+                        .insert(new.data, iced_native::image::Handle::from_path(new.path));
+                }
+                dbg!(a);
+            }
         }
         Command::none()
     }
 
     fn view(&self) -> Element<Message> {
         let view_matrix = hexgrid::view_port(
-            &self.matrix,
-            self.io_cache.top_left_hex,
-            self.io_cache.view_cells_x - 1,
-            self.io_cache.view_cells_y - 1,
+            &self.game_state.matrix,
+            self.game_state.io_cache.top_left_hex,
+            self.game_state.io_cache.view_cells_x - 1,
+            self.game_state.io_cache.view_cells_y - 1,
         );
         let hexgrid::XYCont {
             x: base_x,
             y: base_y,
-        } = self.io_cache.top_left_hex;
+        } = self.game_state.io_cache.top_left_hex;
         let x = view_matrix
             .iter()
             .enumerate()
@@ -236,8 +291,8 @@ impl Application for GameState {
                 let padding: Element<'static, Message> =
                     crate::Element::from(if (base_x + x_index as i32) % 2 == 0 {
                         container("")
-                            .width((*self).io_cache.cell_y_size)
-                            .height((*self).io_cache.cell_x_size / 2.0)
+                            .width(self.game_state.io_cache.cell_y_size)
+                            .height(self.game_state.io_cache.cell_x_size / 2.0)
                     } else {
                         container("").width(10).height(10)
                     });
@@ -255,7 +310,8 @@ impl Application for GameState {
                                 y: matrix_y,
                             },
                             i.clone(),
-                            &self,
+                            &self.game_state,
+                            &self.queues.send_img_job,
                         )
                     })
                     .collect();
@@ -265,7 +321,7 @@ impl Application for GameState {
             .collect();
         let matrix = crate::Element::from(iced::widget::Row::with_children(x));
         let resources = crate::Element::from(visualize_cell::to_text(
-            format!("{:?}", self.resources).to_string(),
+            format!("{:?}", self.game_state.resources).to_string(),
         ));
         let end_turn_content = visualize_cell::to_text("End Turn".to_string());
         let zoom_out_content = visualize_cell::to_text("Zoom Out".to_string());
@@ -279,7 +335,7 @@ impl Application for GameState {
         let ui_misc = crate::Element::from(row![visualize_cell::to_text(
             format!(
                 "{:?}",
-                self.io_cache.view_cells_x * self.io_cache.view_cells_y
+                self.game_state.io_cache.view_cells_x * self.game_state.io_cache.view_cells_y
             )
             .to_string()
         ),]);

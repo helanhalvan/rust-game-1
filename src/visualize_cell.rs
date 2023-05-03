@@ -16,6 +16,7 @@ use widget::Element;
 pub type ImgBuffer = HashMap<celldata::CellState, image::Handle>;
 
 pub fn new_img_buffer() -> ImgBuffer {
+    /*
     let ret: ImgBuffer = make_imgs::all_imgs()
         .iter()
         .map(|(i, j)| {
@@ -26,7 +27,8 @@ pub fn new_img_buffer() -> ImgBuffer {
             }
         })
         .collect();
-    return ret;
+    */
+    return HashMap::new();
 }
 
 fn has_image(s: celldata::CellState, buff: &ImgBuffer) -> Option<&image::Handle> {
@@ -41,13 +43,17 @@ pub fn to_gui<'a>(
     pos: hexgrid::XYCont<i32>,
     s: celldata::CellState,
     g: &GameState,
+    send: &std::sync::mpsc::Sender<celldata::CellState>,
 ) -> Element<'a, Message> {
     let imgs: &ImgBuffer = &g.img_buffer;
     let content = match building::has_actions(pos, s, g) {
-        Some(actions) => render_action_cell(actions, pos, imgs, s),
+        Some(actions) => render_action_cell(actions, pos, imgs, s, send),
         None => match has_image(s, imgs) {
             Some(img_handle) => to_image(img_handle),
-            None => backup_formatter(s),
+            None => {
+                let _ = send.send(s);
+                backup_formatter(s)
+            }
         },
     };
 
@@ -66,6 +72,7 @@ fn render_action_cell<'a>(
     pos: hexgrid::Pos,
     imgs: &ImgBuffer,
     s: celldata::CellState,
+    send: &std::sync::mpsc::Sender<celldata::CellState>,
 ) -> Element<'a, Message> {
     let layout = if actions.len() > 3 {
         to_rectangle(actions, 4, 2)
@@ -89,7 +96,10 @@ fn render_action_cell<'a>(
         .collect();
     let top = match has_image(s, imgs) {
         Some(img) => to_image(img),
-        None => to_text(format!("{:?}", s.variant).to_string()),
+        None => {
+            let _ = send.send(s);
+            to_text(format!("{:?}", s.variant).to_string())
+        }
     };
     grid.push(top);
     crate::Element::from(iced::widget::column(grid))

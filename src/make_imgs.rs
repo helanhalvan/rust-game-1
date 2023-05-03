@@ -7,10 +7,10 @@ use cairo::Context;
 
 use itertools::Itertools;
 use palette::{FromColor, Hsl, Srgb};
-
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 
-use crate::celldata::{CellState, CellStateData};
+use crate::celldata::{CellState, CellStateData, CellStateVariant};
 use crate::resource::Resource;
 use crate::{actionmachine, visualize_cell};
 use crate::{
@@ -19,6 +19,15 @@ use crate::{
 };
 
 type Myrgb = palette::rgb::Rgb<Srgb, f64>;
+
+const BASE: &str = "./img/";
+
+#[derive(Serialize, Deserialize, Debug)]
+struct color_source {
+    a: f32,
+    b: f32,
+    c: f32,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Icon {
@@ -35,123 +44,158 @@ pub fn all_imgs() -> Vec<(celldata::CellState, String)> {
     return all_imgs_buff;
 }
 
+fn get_color_pair(cv: CellStateVariant) -> (Myrgb, Myrgb) {
+    let dir = "".to_string() + BASE + &cv.to_string();
+    let path = dir.clone() + "/colors.json";
+    if let Ok(f) = fs::read_to_string(&path) {
+        let p: color_source = serde_json::from_str(&f).unwrap();
+        color_pair(p)
+    } else {
+        let mut rng = rand::thread_rng();
+        let p = color_source {
+            a: rng.gen(),
+            b: rng.gen(),
+            c: rng.gen(),
+        };
+        let cont = serde_json::to_string(&p).unwrap();
+        let _ = fs::create_dir_all(dir);
+        fs::write(path, cont).unwrap();
+        color_pair(p)
+    }
+}
+
 pub fn make_imgs() {
     for (variant, vec) in statespace_groups() {
-        let (background_color, front_color) = random_color_pair();
-        let name = variant.to_string();
-        let width = (visualize_cell::START_CELL_Y_SIZE * 4.0) as i32;
-        let height = (visualize_cell::START_CELL_X_SIZE * 4.0) as i32;
-        let fontsize = height as f64 / 8.0;
-        let spacing = height as f64 / 40.0;
-
+        let (background_color, front_color) = get_color_pair(variant);
         for i in vec {
             let path = make_path(i);
             if let Ok(_) = fs::read(&path) {
                 print!("x");
                 continue;
             }
-            let surface = cairo::ImageSurface::create(Format::Rgb24.into(), width, height).unwrap();
-            let mut context = cairo::Context::new(&surface).unwrap();
-            context = set_color(context, background_color);
-            context.rectangle(0., 0., f64::from(width), f64::from(height));
-            let _ = context.fill();
-            context.set_line_width(spacing);
-            context = set_color(context, front_color);
+            make_image_int(i, (background_color, front_color))
+        }
+    }
+}
 
-            context.select_font_face(
-                "Monaco", // TODO find cool font
-                cairo::FontSlant::Normal,
-                cairo::FontWeight::Normal,
+//TODO send image invoking this on failed render
+pub fn make_image(c: CellState) -> String {
+    let path = make_path(c);
+    if let Ok(_) = fs::read(&path) {
+        print!("x");
+        return path;
+    }
+    let (background_color, front_color) = get_color_pair(c.variant);
+    make_image_int(c, (background_color, front_color));
+    path
+}
+
+fn make_image_int(c: CellState, (background_color, front_color): (Myrgb, Myrgb)) {
+    let name = c.variant.to_string();
+    let width = (visualize_cell::START_CELL_Y_SIZE * 4.0) as i32;
+    let height = (visualize_cell::START_CELL_X_SIZE * 4.0) as i32;
+    let fontsize = height as f64 / 8.0;
+    let spacing = height as f64 / 40.0;
+    let path = make_path(c);
+    let surface = cairo::ImageSurface::create(Format::Rgb24.into(), width, height).unwrap();
+    let mut context = cairo::Context::new(&surface).unwrap();
+    context = set_color(context, background_color);
+    context.rectangle(0., 0., f64::from(width), f64::from(height));
+    let _ = context.fill();
+    context.set_line_width(spacing);
+    context = set_color(context, front_color);
+
+    context.select_font_face(
+        "Monaco", // TODO find cool font
+        cairo::FontSlant::Normal,
+        cairo::FontWeight::Normal,
+    );
+    context.set_font_size(fontsize as f64);
+    let top_y = spacing * 3.0;
+    //context.text_extents(&name); // dont know what this does or why it would be needed
+    context.move_to(spacing as f64, (spacing + fontsize) as f64);
+    let _ = context.show_text(&name);
+    context.translate(0.0, fontsize);
+    context.move_to(0.0, 0.0);
+    let _ = context.fill();
+
+    match c.data {
+        CellStateData::Unit => {
+            context.translate(width as f64 / 2.0, height as f64 / 2.0);
+            draw_icon(context, spacing * 8.0, Icon::OtherTriangle);
+        }
+        CellStateData::InProgress(actionmachine::InProgress::Pure(countdown))
+        | CellStateData::InProgress(actionmachine::InProgress::WithOther(countdown, _)) => {
+            draw_x(
+                context,
+                countdown as i32,
+                spacing * 4.0,
+                Icon::BrokenCircle,
+                6,
             );
-            context.set_font_size(fontsize as f64);
-            let top_y = spacing * 3.0;
-            //context.text_extents(&name); // dont know what this does or why it would be needed
-            context.move_to(spacing as f64, (spacing + fontsize) as f64);
-            let _ = context.show_text(&name);
-            context.translate(0.0, fontsize);
-            context.move_to(0.0, 0.0);
+        }
+        CellStateData::Slot {
+            slot: celldata::Slot::Done,
+        } => {
+            context.move_to(spacing, top_y);
+            context.line_to(width as f64 / 2.0, height as f64 - spacing - fontsize);
+            context.line_to(width as f64 - spacing, top_y);
+            context.line_to(spacing, top_y);
+            context.close_path();
             let _ = context.fill();
-
-            match i.data {
-                CellStateData::Unit => {
-                    context.translate(width as f64 / 2.0, height as f64 / 2.0);
-                    draw_icon(context, spacing * 8.0, Icon::OtherTriangle);
+        }
+        CellStateData::Slot {
+            slot: celldata::Slot::Empty,
+        } => {
+            context.move_to(spacing, top_y);
+            context.line_to(width as f64 / 2.0, height as f64 - spacing - fontsize);
+            context.line_to(width as f64 - spacing, top_y);
+            context.line_to(spacing, top_y);
+            context.close_path();
+            let _ = context.stroke();
+        }
+        CellStateData::Resource(Resource::Pure(resources))
+        | CellStateData::Resource(Resource::WithVariant(resources, _)) => {
+            let map = resource::to_key_value_display_amounts(c.variant, resources);
+            let number_of_resources = map.keys().count() as f64;
+            let icon_radius = (spacing * 6.0) / number_of_resources;
+            let columns = number_of_resources as i32 * 2;
+            match map.get(&resource::ResourceType::Builders) {
+                Some(value) => {
+                    context = draw_x(context, *value, icon_radius, Icon::BrokenCircle, columns);
+                    context.translate(width as f64 / number_of_resources, 0.0)
                 }
-                CellStateData::InProgress(actionmachine::InProgress::Pure(countdown))
-                | CellStateData::InProgress(actionmachine::InProgress::WithOther(countdown, _)) => {
-                    draw_x(
-                        context,
-                        countdown as i32,
-                        spacing * 4.0,
-                        Icon::BrokenCircle,
-                        6,
-                    );
-                }
-                CellStateData::Slot {
-                    slot: celldata::Slot::Done,
-                } => {
-                    context.move_to(spacing, top_y);
-                    context.line_to(width as f64 / 2.0, height as f64 - spacing - fontsize);
-                    context.line_to(width as f64 - spacing, top_y);
-                    context.line_to(spacing, top_y);
-                    context.close_path();
-                    let _ = context.fill();
-                }
-                CellStateData::Slot {
-                    slot: celldata::Slot::Empty,
-                } => {
-                    context.move_to(spacing, top_y);
-                    context.line_to(width as f64 / 2.0, height as f64 - spacing - fontsize);
-                    context.line_to(width as f64 - spacing, top_y);
-                    context.line_to(spacing, top_y);
-                    context.close_path();
-                    let _ = context.stroke();
-                }
-                CellStateData::Resource(Resource::Pure(resources))
-                | CellStateData::Resource(Resource::WithVariant(resources, _)) => {
-                    let map = resource::to_key_value_display_amounts(i.variant, resources);
-                    let number_of_resources = map.keys().count() as f64;
-                    let icon_radius = (spacing * 6.0) / number_of_resources;
-                    let columns = number_of_resources as i32 * 2;
-                    match map.get(&resource::ResourceType::Builders) {
-                        Some(value) => {
-                            context =
-                                draw_x(context, *value, icon_radius, Icon::BrokenCircle, columns);
-                            context.translate(width as f64 / number_of_resources, 0.0)
-                        }
-                        None => {}
-                    };
-                    match map.get(&resource::ResourceType::LogisticsPoints) {
-                        Some(value) => {
-                            context = draw_x(context, *value, icon_radius, Icon::Triangle, columns);
-                            context.translate(width as f64 / number_of_resources, 0.0)
-                        }
-                        None => {}
-                    }
-
-                    match map.get(&resource::ResourceType::BuildTime) {
-                        Some(value) => {
-                            context = draw_x(context, *value, icon_radius, Icon::Triangle, columns);
-                            context.translate(width as f64 / number_of_resources, 0.0)
-                        }
-                        None => {}
-                    }
-
-                    match map.get(&resource::ResourceType::Wood) {
-                        Some(value) => {
-                            draw_x(context, *value, icon_radius, Icon::OtherTriangle, columns);
-                        }
-                        None => {}
-                    }
-                }
+                None => {}
             };
+            match map.get(&resource::ResourceType::LogisticsPoints) {
+                Some(value) => {
+                    context = draw_x(context, *value, icon_radius, Icon::Triangle, columns);
+                    context.translate(width as f64 / number_of_resources, 0.0)
+                }
+                None => {}
+            }
 
-            let mut file = File::create(&path).expect("Couldn't create 'file.png'");
-            match surface.write_to_png(&mut file) {
-                Ok(_) => print!("."),
-                Err(_) => println!("Error create file.png"),
+            match map.get(&resource::ResourceType::BuildTime) {
+                Some(value) => {
+                    context = draw_x(context, *value, icon_radius, Icon::Triangle, columns);
+                    context.translate(width as f64 / number_of_resources, 0.0)
+                }
+                None => {}
+            }
+
+            match map.get(&resource::ResourceType::Wood) {
+                Some(value) => {
+                    draw_x(context, *value, icon_radius, Icon::OtherTriangle, columns);
+                }
+                None => {}
             }
         }
+    };
+
+    let mut file = File::create(&path).expect("Couldn't create 'file.png'");
+    match surface.write_to_png(&mut file) {
+        Ok(_) => print!("."),
+        Err(_) => println!("Error create file.png"),
     }
 }
 
@@ -197,12 +241,11 @@ fn set_color(context: Context, color: Myrgb) -> Context {
     context
 }
 
-fn random_color_pair() -> (Myrgb, Myrgb) {
-    let mut rng = rand::thread_rng();
-    let y: f32 = rng.gen(); // generates a float between 0 and 1
+fn color_pair(color_source { a, b, c }: color_source) -> (Myrgb, Myrgb) {
+    let y: f32 = a;
     let hue: f32 = y * 360.0;
-    let saturation: f32 = f32::max(rng.gen(), 0.6);
-    let value: f32 = f32::max(rng.gen(), 0.6);
+    let saturation: f32 = f32::max(b, 0.6);
+    let value: f32 = f32::max(c, 0.6);
     let hsv: palette::Hsv<f64> = palette::Hsv::new(hue, saturation, value);
     let hsl = Hsl::from_color(hsv);
 
@@ -242,11 +285,11 @@ fn statespace_groups() -> HashMap<celldata::CellStateVariant, Vec<CellState>> {
 
 fn make_path(cellstate: celldata::CellState) -> String {
     let cv = cellstate.variant;
-    let base = "./img/".to_string();
+    let base = "".to_string() + BASE + &cv.to_string();
     let (dir, path) = match cellstate.data {
         CellStateData::InProgress(actionmachine::InProgress::Pure(countdown))
         | CellStateData::InProgress(actionmachine::InProgress::WithOther(countdown, _)) => {
-            let dir = base + &cv.to_string() + "/inprogress/";
+            let dir = base + "/inprogress/";
             (dir.clone(), dir + &countdown.to_string() + &".png")
         }
         celldata::CellStateData::Resource(Resource::Pure(r))
@@ -256,25 +299,25 @@ fn make_path(cellstate: celldata::CellState) -> String {
                 .sorted()
                 .map(|(t, v)| format!("{:?}", t) + ":" + &v.to_string())
                 .join("_");
-            let dir = base + &cv.to_string() + "/resource/";
+            let dir = base + "/resource/";
             (dir.clone(), dir + "a_" + &name + &".png")
         }
         celldata::CellStateData::Unit { .. } => {
-            let dir = base + &cv.to_string() + "/unit/";
+            let dir = base + "/unit/";
             (dir.clone(), dir + &"unit.png")
         }
         celldata::CellStateData::Slot {
             slot: celldata::Slot::Empty,
             ..
         } => {
-            let dir = base + &cv.to_string() + "/empty/";
+            let dir = base + "/empty/";
             (dir.clone(), dir + &"empty.png")
         }
         celldata::CellStateData::Slot {
             slot: celldata::Slot::Done,
             ..
         } => {
-            let dir = base + &cv.to_string() + "/done/";
+            let dir = base + "/done/";
             (dir.clone(), dir + "done" + &".png")
         }
     };

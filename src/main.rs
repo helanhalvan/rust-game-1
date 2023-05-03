@@ -192,6 +192,19 @@ impl Application for GameState {
             Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::CursorLeft)) => {
                 (*self).io_cache.is_mousedown = false;
             }
+            Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::WheelScrolled {
+                delta: iced_native::mouse::ScrollDelta::Lines { y, .. },
+            })) => {
+                let d = y.abs() * visualize_cell::ZOOM_FACTOR;
+                if y < 0.0 {
+                    (*self).io_cache.cell_x_size = (*self).io_cache.cell_x_size / d;
+                    (*self).io_cache.cell_y_size = (*self).io_cache.cell_y_size / d;
+                } else {
+                    (*self).io_cache.cell_x_size = (*self).io_cache.cell_x_size * d;
+                    (*self).io_cache.cell_y_size = (*self).io_cache.cell_y_size * d;
+                }
+                re_calc_cells_in_view(self)
+            }
             Message::NativeEvent(iced::Event::Window(iced::window::Event::Resized {
                 width,
                 height,

@@ -3,12 +3,14 @@ use std::collections::HashMap;
 use crate::{
     building,
     celldata::{self},
-    css, hexgrid, make_imgs, widget, GameState, Message,
+    css::{self, Container},
+    hexgrid, make_imgs, widget, GameState, Message,
 };
 use iced::{
     alignment::{Horizontal, Vertical},
     widget::{button, container, image, text},
 };
+use iced_native::Length;
 use widget::Element;
 
 pub type ImgBuffer = HashMap<celldata::CellState, image::Handle>;
@@ -44,7 +46,7 @@ pub fn to_gui<'a>(
     let content = match building::has_actions(pos, s, g) {
         Some(actions) => render_action_cell(actions, pos, imgs, s),
         None => match has_image(s, imgs) {
-            Some(img) => crate::Element::from(image::viewer(img.clone())),
+            Some(img_handle) => to_image(img_handle),
             None => backup_formatter(s),
         },
     };
@@ -86,7 +88,7 @@ fn render_action_cell<'a>(
         })
         .collect();
     let top = match has_image(s, imgs) {
-        Some(img) => crate::Element::from(image::viewer(img.clone())),
+        Some(img) => to_image(img),
         None => to_text(format!("{:?}", s.variant).to_string()),
     };
     grid.push(top);
@@ -125,4 +127,11 @@ pub fn to_rectangle<T: Clone>(
 
 pub fn to_text<'a>(s: String) -> Element<'a, Message> {
     return crate::Element::from(text(s).size(20));
+}
+
+fn to_image<'a>(img_handle: &image::Handle) -> Element<'a, Message> {
+    let image = iced::widget::Image::new(img_handle.clone())
+        .width(Length::Fill)
+        .height(Length::Fill);
+    crate::Element::from(container(image))
 }

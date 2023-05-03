@@ -9,7 +9,7 @@ use crate::{celldata, make_world};
 use std::hash::Hash;
 
 pub const CHUNK_SIZE: usize = 0x10;
-const INDEX_MASK: i32 = 0xF;
+const INDEX_MASK: i32 = CHUNK_SIZE as i32 - 1;
 const CHUNK_MASK: i32 = !(0 ^ INDEX_MASK);
 
 #[derive(Debug, Clone)]
@@ -117,26 +117,27 @@ pub fn chunk_from_example<T: Clone + CellGen<GenContext = C>, C: Clone>(example:
 
 pub fn touch_all_chunks<T: Clone + CellGen<GenContext = C>, C: Clone>(
     source: &mut Hexgrid<T, C>,
-    XYCont { x, y }: XYCont<i32>,
+    XYCont { x: x0, y: y0 }: XYCont<i32>,
     height_extra: i32,
     width_extra: i32,
-) -> Matrix<T> {
-    let mut ret = vec![];
+) {
     for dx in 0..(height_extra + 1) {
-        let mut y_buff = vec![];
         for dy in 0..(width_extra + 1) {
-            let new = get(
-                XYCont {
-                    x: x + dx,
-                    y: y + dy,
-                },
-                source,
-            );
-            y_buff.push(new);
+            let c = XYCont {
+                x: x0 + dx,
+                y: y0 + dy,
+            };
+            if is_chunk_corner(c) {
+                get(c, source);
+            }
         }
-        ret.push(y_buff)
     }
-    ret
+}
+
+fn is_chunk_corner(XYCont { x: x0, y: y0 }: XYCont<i32>) -> bool {
+    let x = x0 & INDEX_MASK;
+    let y = y0 & INDEX_MASK;
+    ((x == 0) || (x == INDEX_MASK)) && (y == 0 || (y == INDEX_MASK))
 }
 
 pub fn view_port<T: Clone + CellGen<GenContext = C>, C: Clone>(

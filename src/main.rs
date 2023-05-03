@@ -62,6 +62,10 @@ pub struct IOCache {
     top_left_hex: hexgrid::XYCont<i32>,
     view_cells_x: i32,
     view_cells_y: i32,
+    cell_x_size: f32,
+    cell_y_size: f32,
+    width_px: i32,
+    height_px: i32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -75,6 +79,7 @@ pub struct GameResources {
 pub enum Message {
     Build(celldata::CellStateVariant, hexgrid::Pos),
     EndTurn,
+    Zoom(bool),
     NativeEvent(iced_native::Event),
 }
 
@@ -91,6 +96,12 @@ impl Application for GameState {
     fn new(_flags: ()) -> (Self, Command<Message>) {
         let start_x: i32 = 0;
         let start_y: i32 = 0;
+        let start_view_cells_x = 7;
+        let start_view_cells_y = 5;
+        let start_cell_x_size = 100.0;
+        let start_cell_y_size = 125.0;
+        let width_px = 1000;
+        let height_px = 1000;
         let m1 = make_world::new();
         let mut g = GameState {
             matrix: m1,
@@ -104,19 +115,21 @@ impl Application for GameState {
             img_buffer: visualize_cell::new_img_buffer(),
             io_cache: IOCache {
                 top_left_pos: iced::Point {
-                    x: (start_x as f32 - (visualize_cell::VIEW_CELLS_X / 2) as f32)
-                        * visualize_cell::CELL_X_SIZE,
-                    y: (start_y as f32 - (visualize_cell::VIEW_CELLS_Y / 2) as f32)
-                        * visualize_cell::CELL_Y_SIZE,
+                    x: (start_x as f32 - (start_view_cells_x / 2) as f32) * start_cell_x_size,
+                    y: (start_y as f32 - (start_view_cells_y / 2) as f32) * start_cell_y_size,
                 },
                 latest_cursor: iced::Point { x: 0.0, y: 0.0 },
                 is_mousedown: false,
                 top_left_hex: hexgrid::XYCont {
-                    x: start_x as i32 - (visualize_cell::VIEW_CELLS_X / 2),
-                    y: start_y as i32 - (visualize_cell::VIEW_CELLS_Y / 2),
+                    x: start_x as i32 - (start_view_cells_x / 2),
+                    y: start_y as i32 - (start_view_cells_y / 2),
                 },
-                view_cells_x: visualize_cell::VIEW_CELLS_X,
-                view_cells_y: visualize_cell::VIEW_CELLS_Y,
+                view_cells_x: start_view_cells_x,
+                view_cells_y: start_view_cells_y,
+                cell_x_size: start_cell_x_size,
+                cell_y_size: start_cell_y_size,
+                width_px: width_px,
+                height_px: height_px,
             },
         };
         let p = hexgrid::Pos {
@@ -148,9 +161,23 @@ impl Application for GameState {
                     let old_p = (*self).io_cache.latest_cursor;
                     let delta = old_p - position;
                     (*self).io_cache.top_left_pos = (*self).io_cache.top_left_pos + delta;
-                    (*self).io_cache.top_left_hex = approx((*self).io_cache.top_left_pos);
+                    re_calc_cells_in_view(self)
                 }
                 (*self).io_cache.latest_cursor = position;
+            }
+            Message::Zoom(is_out) => {
+                if is_out {
+                    (*self).io_cache.cell_x_size =
+                        (*self).io_cache.cell_x_size / visualize_cell::ZOOM_FACTOR;
+                    (*self).io_cache.cell_y_size =
+                        (*self).io_cache.cell_y_size / visualize_cell::ZOOM_FACTOR;
+                } else {
+                    (*self).io_cache.cell_x_size =
+                        (*self).io_cache.cell_x_size * visualize_cell::ZOOM_FACTOR;
+                    (*self).io_cache.cell_y_size =
+                        (*self).io_cache.cell_y_size * visualize_cell::ZOOM_FACTOR;
+                }
+                re_calc_cells_in_view(self)
             }
             Message::NativeEvent(iced::Event::Mouse(iced::mouse::Event::ButtonPressed(
                 iced::mouse::Button::Left,
@@ -169,14 +196,9 @@ impl Application for GameState {
                 width,
                 height,
             })) => {
-                (*self).io_cache.view_cells_x = width as i32 / visualize_cell::CELL_X_SIZE as i32;
-                (*self).io_cache.view_cells_y = height as i32 / visualize_cell::CELL_Y_SIZE as i32;
-                hexgrid::touch_all_chunks(
-                    &mut self.matrix,
-                    self.io_cache.top_left_hex,
-                    self.io_cache.view_cells_x - 1,
-                    self.io_cache.view_cells_y - 1,
-                );
+                (*self).io_cache.width_px = width as i32;
+                (*self).io_cache.height_px = height as i32;
+                re_calc_cells_in_view(self)
             }
             Message::NativeEvent(_) => {}
         }
@@ -201,8 +223,8 @@ impl Application for GameState {
                 let padding: Element<'static, Message> =
                     crate::Element::from(if (base_x + x_index as i32) % 2 == 0 {
                         container("")
-                            .width(visualize_cell::CELL_Y_SIZE)
-                            .height(visualize_cell::CELL_X_SIZE / 2.0)
+                            .width((*self).io_cache.cell_y_size)
+                            .height((*self).io_cache.cell_x_size / 2.0)
                     } else {
                         container("").width(10).height(10)
                     });
@@ -233,8 +255,14 @@ impl Application for GameState {
             format!("{:?}", self.resources).to_string(),
         ));
         let end_turn_content = visualize_cell::to_text("End Turn".to_string());
-        let buttom_buttons =
-            crate::Element::from(button(end_turn_content).on_press(Message::EndTurn));
+        let zoom_out_content = visualize_cell::to_text("Zoom Out".to_string());
+        let zoom_in_content = visualize_cell::to_text("Zoom In".to_string());
+
+        let buttom_buttons = crate::Element::from(row![
+            button(end_turn_content).on_press(Message::EndTurn),
+            button(zoom_out_content).on_press(Message::Zoom(true)),
+            button(zoom_in_content).on_press(Message::Zoom(false)),
+        ]);
         let ui_misc = crate::Element::from(row![
             visualize_cell::to_text(format!("{:?}", self.io_cache.top_left_pos).to_string()),
             visualize_cell::to_text(format!("{:?}", self.io_cache.latest_cursor).to_string()),
@@ -250,9 +278,21 @@ impl Application for GameState {
     }
 }
 
-fn approx(iced::Point { x, y }: iced_native::Point) -> hexgrid::XYCont<i32> {
+fn re_calc_cells_in_view(g: &mut GameState) {
+    (*g).io_cache.top_left_hex = approx((*g).io_cache.top_left_pos, g);
+    (*g).io_cache.view_cells_x = (*g).io_cache.width_px as i32 / (*g).io_cache.cell_x_size as i32;
+    (*g).io_cache.view_cells_y = (*g).io_cache.height_px as i32 / (*g).io_cache.cell_y_size as i32;
+    hexgrid::touch_all_chunks(
+        &mut g.matrix,
+        g.io_cache.top_left_hex,
+        g.io_cache.view_cells_x - 1,
+        g.io_cache.view_cells_y - 1,
+    );
+}
+
+fn approx(iced::Point { x, y }: iced_native::Point, g: &GameState) -> hexgrid::XYCont<i32> {
     hexgrid::XYCont {
-        x: (x / visualize_cell::CELL_X_SIZE) as i32,
-        y: (y / visualize_cell::CELL_Y_SIZE) as i32,
+        x: (x / g.io_cache.cell_x_size) as i32,
+        y: (y / g.io_cache.cell_y_size) as i32,
     }
 }

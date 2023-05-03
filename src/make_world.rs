@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use noise::{utils::*, Fbm, Perlin, Worley};
 
@@ -48,9 +51,16 @@ pub struct GenContext {
 }
 
 pub fn new() -> hexgrid::Hexgrid<celldata::CellState, GenContext> {
+    let seed = if let Ok(n) = SystemTime::now().duration_since(UNIX_EPOCH) {
+        (n.as_nanos() & u32::MAX as u128) as u32
+    } else {
+        dbg!("TIME PANIC");
+        0
+    };
+    dbg!(seed);
     hexgrid::new(
         GenContext {
-            main_noise: Fbm::<Worley>::default(),
+            main_noise: Fbm::<Worley>::new(seed),
         },
         celldata::unit_state(celldata::CellStateVariant::OutOfBounds),
     )

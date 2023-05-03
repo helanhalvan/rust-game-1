@@ -31,10 +31,9 @@ fn has_image(s: celldata::CellState, buff: &ImgBuffer) -> Option<&image::Handle>
     buff.get(&s)
 }
 
-pub const CELL_X_SIZE: f32 = 100.0;
-pub const CELL_Y_SIZE: f32 = 125.0;
-pub const VIEW_CELLS_X: i32 = 7;
-pub const VIEW_CELLS_Y: i32 = 5;
+pub const START_CELL_X_SIZE: f32 = 100.0;
+pub const START_CELL_Y_SIZE: f32 = 125.0;
+pub const ZOOM_FACTOR: f32 = 1.5;
 
 pub fn to_gui<'a>(
     pos: hexgrid::XYCont<i32>,
@@ -52,8 +51,8 @@ pub fn to_gui<'a>(
 
     crate::Element::from(
         container(content)
-            .width(CELL_Y_SIZE)
-            .height(CELL_X_SIZE)
+            .width(g.io_cache.cell_y_size)
+            .height(g.io_cache.cell_x_size)
             .style(css::Container::Bordered)
             .align_x(Horizontal::Center)
             .align_y(Vertical::Center),

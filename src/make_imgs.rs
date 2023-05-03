@@ -39,8 +39,8 @@ pub fn make_imgs() {
     for (variant, vec) in statespace_groups() {
         let (background_color, front_color) = random_color_pair();
         let name = variant.to_string();
-        let width = (visualize_cell::CELL_Y_SIZE * 4.0) as i32;
-        let height = (visualize_cell::CELL_X_SIZE * 4.0) as i32;
+        let width = (visualize_cell::START_CELL_Y_SIZE * 4.0) as i32;
+        let height = (visualize_cell::START_CELL_X_SIZE * 4.0) as i32;
         let fontsize = height as f64 / 8.0;
         let spacing = height as f64 / 40.0;
 

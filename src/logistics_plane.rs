@@ -261,7 +261,7 @@ fn add_to_close(
         lp
     } else {
         src.into_iter().fold(lp, |b, src_item| {
-            hexgrid::within(src_item, &mut (b.clone()), 2).fold(b, |mut acc, (pn, c)| match c {
+            hexgrid::within(src_item, &mut (b.clone()), 3).fold(b, |mut acc, (pn, c)| match c {
                 LogisticsState::None => {
                     let new_cell = LogisticsState::Available(Available {
                         locations: new_subset.clone(),

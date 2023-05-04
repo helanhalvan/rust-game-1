@@ -40,11 +40,13 @@ pub(crate) fn unit_state(cv: CellStateVariant) -> CellState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Sequence)]
 pub(crate) enum CellStateVariant {
+    Menu,
     Hidden,
     Unused,
     Hot,
     Insulation,
     Feeder,
+    WoodFarm,
     WoodCutter,
     Seller,
     InProgress,
@@ -71,6 +73,10 @@ impl fmt::Display for CellStateVariant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
+}
+
+pub(crate) fn new(cv: CellStateVariant, data: CellStateData) -> CellState {
+    CellState { variant: cv, data }
 }
 
 pub(crate) fn is_hot(c: CellState) -> bool {

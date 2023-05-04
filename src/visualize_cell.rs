@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
 use crate::{
-    building,
     celldata::{self},
     css::{self},
-    hexgrid, widget, GameState, Message,
+    hexgrid, menu, widget, GameState, Message,
 };
 use iced::{
     alignment::{Horizontal, Vertical},
@@ -16,18 +15,6 @@ use widget::Element;
 pub(crate) type ImgBuffer = HashMap<celldata::CellState, image::Handle>;
 
 pub(crate) fn new_img_buffer() -> ImgBuffer {
-    /*
-    let ret: ImgBuffer = make_imgs::all_imgs()
-        .iter()
-        .map(|(i, j)| {
-            if std::path::Path::new(j).exists() {
-                (*i, image::Handle::from_path(j))
-            } else {
-                unreachable!("{:?}", (i, j))
-            }
-        })
-        .collect();
-    */
     return HashMap::new();
 }
 
@@ -46,7 +33,7 @@ pub(crate) fn to_gui<'a>(
     send: &std::sync::mpsc::Sender<celldata::CellState>,
 ) -> Element<'a, Message> {
     let imgs: &ImgBuffer = &g.img_buffer;
-    let content = match building::has_actions(pos, s, g) {
+    let content = match menu::has_actions(pos, s, g) {
         Some(actions) => render_action_cell(actions, pos, imgs, s, send),
         None => match has_image(s, imgs) {
             Some(img_handle) => to_image(img_handle),
@@ -74,10 +61,10 @@ fn render_action_cell<'a>(
     s: celldata::CellState,
     send: &std::sync::mpsc::Sender<celldata::CellState>,
 ) -> Element<'a, Message> {
-    let layout = if actions.len() > 3 {
+    let layout = if actions.len() > 2 {
         to_rectangle(actions, 4, 2)
     } else {
-        to_rectangle(actions, 3, 1)
+        to_rectangle(actions, 2, 1)
     };
     let mut grid: Vec<_> = layout
         .iter()

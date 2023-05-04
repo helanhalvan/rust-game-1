@@ -6,6 +6,7 @@ pub(crate) mod hexgrid;
 pub(crate) mod logistics_plane;
 pub(crate) mod make_imgs;
 pub(crate) mod make_world;
+pub(crate) mod menu;
 pub(crate) mod resource;
 pub(crate) mod visualize_cell;
 

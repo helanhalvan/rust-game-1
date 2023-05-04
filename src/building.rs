@@ -5,74 +5,8 @@ use crate::{
     celldata::{self, CellState, CellStateData, CellStateVariant},
     hexgrid::{self},
     logistics_plane::{self, LogisticsState},
-    resource, GameState,
+    menu, resource, GameState,
 };
-
-pub(crate) fn has_actions(
-    pos: hexgrid::Pos,
-    c: celldata::CellState,
-    g: &GameState,
-) -> Option<Vec<CellStateVariant>> {
-    if logistics_plane::has_worker(pos, g) {
-        match c.variant {
-            CellStateVariant::Hidden => Some(explore_able()),
-            CellStateVariant::Unused => Some(buildable()),
-            CellStateVariant::Industry => Some(industry()),
-            CellStateVariant::Infrastructure => Some(infrastructure()),
-            CellStateVariant::Extract => Some(extract()),
-            _ => None,
-        }
-    } else {
-        None
-    }
-}
-
-fn extract() -> Vec<CellStateVariant> {
-    vec![
-        CellStateVariant::WoodCutter,
-        CellStateVariant::Seller,
-        CellStateVariant::Back,
-    ]
-}
-
-fn industry() -> Vec<CellStateVariant> {
-    vec![
-        CellStateVariant::Hot,
-        CellStateVariant::Insulation,
-        CellStateVariant::Feeder,
-        CellStateVariant::Back,
-    ]
-}
-
-fn infrastructure() -> Vec<CellStateVariant> {
-    vec![
-        CellStateVariant::Road,
-        CellStateVariant::Hub,
-        CellStateVariant::Back,
-    ]
-}
-
-pub(crate) fn buildable() -> Vec<CellStateVariant> {
-    vec![
-        CellStateVariant::Industry,
-        CellStateVariant::Extract,
-        CellStateVariant::Infrastructure,
-    ]
-}
-
-fn menu_variant_transition(cv0: CellStateVariant) -> Option<CellState> {
-    match cv0 {
-        CellStateVariant::Industry
-        | CellStateVariant::Infrastructure
-        | CellStateVariant::Extract => Some(celldata::unit_state(cv0)),
-        CellStateVariant::Back => Some(celldata::unit_state(CellStateVariant::Unused)),
-        _ => None,
-    }
-}
-
-pub(crate) fn explore_able() -> Vec<CellStateVariant> {
-    vec![CellStateVariant::Unused]
-}
 
 fn has_buildtime() -> Vec<CellStateVariant> {
     enum_iterator::all::<CellStateVariant>()
@@ -89,7 +23,8 @@ fn buildtime(cv: CellStateVariant) -> Option<actionmachine::InProgressWait> {
         CellStateVariant::Feeder => Some(1),
         CellStateVariant::Seller => Some(1),
         CellStateVariant::Insulation => Some(2),
-        CellStateVariant::WoodCutter => Some(3),
+        CellStateVariant::WoodFarm => Some(3),
+        CellStateVariant::WoodCutter => Some(1),
         CellStateVariant::Road => Some(1),
         _ => None,
     }
@@ -133,7 +68,6 @@ pub(crate) fn do_build_progress(
     mut g: GameState,
 ) -> GameState {
     g = logistics_plane::return_lp(p, g);
-
     let builders = resource::get(resource::ResourceType::Builders, r);
     let req = required_per_build_action(cv2);
     let done_threshold = build_action_req(cv2);
@@ -178,7 +112,7 @@ pub(crate) fn max_buildtime() -> actionmachine::InProgressWait {
 }
 
 pub(crate) fn build(cv: CellStateVariant, pos: hexgrid::Pos, mut g: GameState) -> GameState {
-    if let Some(new_cell) = menu_variant_transition(cv) {
+    if let Some(new_cell) = menu::transition(cv, pos, &mut g) {
         hexgrid::set(pos, new_cell, &mut g.matrix);
         g
     } else {
@@ -244,13 +178,20 @@ pub(crate) fn do_build(
             };
             resource::new_pure_stockpile(cv, resource::to_key_value(res))
         }
+        CellStateVariant::WoodCutter => {
+            let res = match oth {
+                actionmachine::Other::CvAndRS(_, res) => res,
+                a => todo!("{:?}", a),
+            };
+            resource::new_pure_stockpile(cv, resource::to_key_value(res))
+        }
         CellStateVariant::Hot => CellState {
             variant: cv,
             data: celldata::CellStateData::Slot {
                 slot: celldata::Slot::Empty,
             },
         },
-        a @ CellStateVariant::WoodCutter => actionmachine::new_in_progress(a, 3),
+        a @ CellStateVariant::WoodFarm => actionmachine::new_in_progress(a, 3),
         CellStateVariant::Hub => {
             let new_ls_cell = LogisticsState::Source;
             hexgrid::set(pos, new_ls_cell, &mut g.logistics_plane);

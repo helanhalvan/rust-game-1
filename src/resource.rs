@@ -18,6 +18,7 @@ pub(crate) enum ResourceType {
     LogisticsPoints = 0,
     Wood,
     Builders,
+    IronOre,
     BuildTime,
 }
 
@@ -229,7 +230,7 @@ fn add_packet_stockpile(p: ResourcePacket, mut s: ResourceStockpile) -> Option<R
 fn max(cv: CellStateVariant, t: ResourceType) -> i32 {
     match (cv, t) {
         (CellStateVariant::Hub, ResourceType::LogisticsPoints) => 18,
-        (CellStateVariant::Hub, ResourceType::Wood) => 50,
+        (CellStateVariant::Hub, ResourceType::Wood) => 100,
         (CellStateVariant::Hub, ResourceType::Builders) => 3,
         (CellStateVariant::Building, ResourceType::BuildTime) => 10,
         (CellStateVariant::Building, ResourceType::Builders) => 2,

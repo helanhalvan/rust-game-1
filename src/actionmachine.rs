@@ -31,7 +31,7 @@ pub(crate) enum Other {
 // to limit effects of order added on order executed
 pub(crate) fn prio(cv: celldata::CellStateVariant) -> Option<Prio> {
     match cv {
-        CellStateVariant::WoodCutter
+        CellStateVariant::WoodFarm
         | CellStateVariant::Hot
         | CellStateVariant::Feeder
         | CellStateVariant::Seller
@@ -98,7 +98,7 @@ pub(crate) fn remove(
 
 pub(crate) fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
     match cv {
-        celldata::CellStateVariant::WoodCutter => 3,
+        celldata::CellStateVariant::WoodFarm => 3,
         celldata::CellStateVariant::Hot => 5,
         celldata::CellStateVariant::Building => building::max_buildtime(),
         a => {
@@ -130,7 +130,7 @@ fn do_in_progress(
 
 fn do_pure_progress_done(p: hexgrid::Pos, cv: CellStateVariant, mut g: GameState) -> GameState {
     match cv {
-        celldata::CellStateVariant::WoodCutter => {
+        celldata::CellStateVariant::WoodFarm => {
             g = logistics_plane::return_lp(p, g);
             let packet =
                 resource::from_key_value(HashMap::from([(resource::ResourceType::Wood, -10)]));

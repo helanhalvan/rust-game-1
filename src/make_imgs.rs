@@ -56,7 +56,6 @@ fn get_color_pair(cv: CellStateVariant) -> (Myrgb, Myrgb) {
     }
 }
 
-//TODO send image invoking this on failed render
 pub(crate) fn make_image(c: CellState) -> String {
     let path = make_path(c);
     if let Ok(_) = fs::read(&path) {
@@ -161,6 +160,14 @@ fn make_image_int(c: CellState, (background_color, front_color): (Myrgb, Myrgb))
                 None => {}
             }
 
+            match map.get(&resource::ResourceType::IronOre) {
+                Some(value) => {
+                    context = draw_x(context, *value, icon_radius, Icon::Triangle, columns);
+                    context.translate(width as f64 / number_of_resources, 0.0)
+                }
+                None => {}
+            }
+
             match map.get(&resource::ResourceType::Wood) {
                 Some(value) => {
                     draw_x(context, *value, icon_radius, Icon::OtherTriangle, columns);
@@ -184,6 +191,7 @@ fn draw_x(mut context: Context, x: i32, radius: f64, icon: Icon, columns: i32) -
     context.translate(size / 2.0, size * 0.75);
     if x > (row_length * columns) {
         let _ = context.show_text(&x.to_string());
+        let _ = context.fill();
         return context;
     }
     for j in 0..x {

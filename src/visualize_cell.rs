@@ -13,9 +13,9 @@ use iced::{
 use iced_native::Length;
 use widget::Element;
 
-pub type ImgBuffer = HashMap<celldata::CellState, image::Handle>;
+pub(crate) type ImgBuffer = HashMap<celldata::CellState, image::Handle>;
 
-pub fn new_img_buffer() -> ImgBuffer {
+pub(crate) fn new_img_buffer() -> ImgBuffer {
     /*
     let ret: ImgBuffer = make_imgs::all_imgs()
         .iter()
@@ -35,11 +35,11 @@ fn has_image(s: celldata::CellState, buff: &ImgBuffer) -> Option<&image::Handle>
     buff.get(&s)
 }
 
-pub const START_CELL_X_SIZE: f32 = 100.0;
-pub const START_CELL_Y_SIZE: f32 = 125.0;
-pub const ZOOM_FACTOR: f32 = 1.5;
+pub(crate) const START_CELL_X_SIZE: f32 = 100.0;
+pub(crate) const START_CELL_Y_SIZE: f32 = 125.0;
+pub(crate) const ZOOM_FACTOR: f32 = 1.5;
 
-pub fn to_gui<'a>(
+pub(crate) fn to_gui<'a>(
     pos: hexgrid::XYCont<i32>,
     s: celldata::CellState,
     g: &GameState,
@@ -117,7 +117,7 @@ fn backup_formatter<'a>(s: celldata::CellState) -> Element<'a, Message> {
 // |1,2|
 // |3,4|
 // |5|
-pub fn to_rectangle<T: Clone>(
+pub(crate) fn to_rectangle<T: Clone>(
     source: impl IntoIterator<Item = T>,
     height: usize,
     width: usize,
@@ -135,7 +135,7 @@ pub fn to_rectangle<T: Clone>(
     ret
 }
 
-pub fn to_text<'a>(s: String) -> Element<'a, Message> {
+pub(crate) fn to_text<'a>(s: String) -> Element<'a, Message> {
     return crate::Element::from(text(s).size(20));
 }
 

@@ -4,10 +4,10 @@ use iced::{
 };
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Theme;
+pub(crate) struct Theme;
 
 #[derive(Debug, Clone, Copy, Default)]
-pub enum Container {
+pub(crate) enum Container {
     #[default]
     Default,
     Bordered,

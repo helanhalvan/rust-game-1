@@ -12,13 +12,13 @@ use crate::{actionmachine, building, hexgrid, resource};
 // and CellState -> CellStateData
 // Seems very boilerplatey
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CellState {
-    pub variant: CellStateVariant,
-    pub data: CellStateData,
+pub(crate) struct CellState {
+    pub(crate) variant: CellStateVariant,
+    pub(crate) data: CellStateData,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CellStateData {
+pub(crate) enum CellStateData {
     Unit,
     Slot { slot: Slot },
     InProgress(actionmachine::InProgress),
@@ -26,39 +26,12 @@ pub enum CellStateData {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Slot {
+pub(crate) enum Slot {
     Empty,
     Done,
 }
 
-//all possible cellstates, grouped by CellStateVariant
-pub type Statespace = Vec<CellState>;
-
-//I'll need a build-statespace for the things with buttons later
-// all possible non-interactive cellstates, used by the UI
-pub fn non_interactive_statespace() -> Statespace {
-    let mut ret = vec![
-        unit_state(CellStateVariant::Insulation),
-        unit_state(CellStateVariant::Feeder),
-        unit_state(CellStateVariant::Seller),
-        unit_state(CellStateVariant::Hidden),
-        unit_state(CellStateVariant::Unused),
-        CellState {
-            variant: CellStateVariant::Hot,
-            data: CellStateData::Slot { slot: Slot::Empty },
-        },
-        CellState {
-            variant: CellStateVariant::Hot,
-            data: CellStateData::Slot { slot: Slot::Done },
-        },
-    ];
-    ret.append(&mut actionmachine::statespace());
-    ret.append(&mut building::statespace());
-    ret.append(&mut resource::statespace());
-    ret
-}
-
-pub fn unit_state(cv: CellStateVariant) -> CellState {
+pub(crate) fn unit_state(cv: CellStateVariant) -> CellState {
     CellState {
         data: CellStateData::Unit,
         variant: cv,
@@ -66,7 +39,7 @@ pub fn unit_state(cv: CellStateVariant) -> CellState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Sequence)]
-pub enum CellStateVariant {
+pub(crate) enum CellStateVariant {
     Hidden,
     Unused,
     Hot,
@@ -100,19 +73,23 @@ impl fmt::Display for CellStateVariant {
     }
 }
 
-pub fn is_hot(c: CellState) -> bool {
+pub(crate) fn is_hot(c: CellState) -> bool {
     let cv: CellStateVariant = c.into();
     is_hot_v(cv)
 }
 
-pub fn is_hot_v(cv: CellStateVariant) -> bool {
+pub(crate) fn is_hot_v(cv: CellStateVariant) -> bool {
     match cv {
         CellStateVariant::Hot => true,
         _ => false,
     }
 }
 
-pub fn leak_delta(cv: CellStateVariant, p: hexgrid::Pos, m: &mut hexgrid::Board) -> Option<i32> {
+pub(crate) fn leak_delta(
+    cv: CellStateVariant,
+    p: hexgrid::Pos,
+    m: &mut hexgrid::Board,
+) -> Option<i32> {
     if let Some((base, n_effects)) = match cv {
         CellStateVariant::Insulation => Some((0, HashMap::from([(CellStateVariant::Hot, -1)]))),
         CellStateVariant::Hot => Some((

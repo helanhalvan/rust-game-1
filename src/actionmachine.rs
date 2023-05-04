@@ -7,36 +7,29 @@ use crate::{
 };
 
 //crontab but for game triggers
-pub type ActionMachine = [HashSet<hexgrid::Pos>; ACTION_MAX_PRIO];
+pub(crate) type ActionMachine = [HashSet<hexgrid::Pos>; ACTION_MAX_PRIO];
 
-pub type Prio = usize;
-pub const ACTION_MAX_PRIO: Prio = (*(&CellStateVariant::Last)) as Prio;
+pub(crate) type Prio = usize;
+pub(crate) const ACTION_MAX_PRIO: Prio = (*(&CellStateVariant::Last)) as Prio;
 
-pub type InProgressWait = u32;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum OnDoneData {
-    Nothing,
-    CellStateVariant(celldata::CellStateVariant),
-}
+pub(crate) type InProgressWait = u32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum InProgress {
+pub(crate) enum InProgress {
     Pure(InProgressWait),
     WithOther(InProgressWait, Other),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Other {
+pub(crate) enum Other {
     CellStateVariant(CellStateVariant),
-    ResourceStockpile(resource::ResourceStockpile),
     CvAndRS(CellStateVariant, resource::ResourceStockpile),
 }
 
 // for now the main point of prio is to ensure
 // all CellStateVariants which are the same are executed after eachother
 // to limit effects of order added on order executed
-pub fn prio(cv: celldata::CellStateVariant) -> Option<Prio> {
+pub(crate) fn prio(cv: celldata::CellStateVariant) -> Option<Prio> {
     match cv {
         CellStateVariant::WoodCutter
         | CellStateVariant::Hot
@@ -47,18 +40,18 @@ pub fn prio(cv: celldata::CellStateVariant) -> Option<Prio> {
     }
 }
 
-pub fn new() -> ActionMachine {
+pub(crate) fn new() -> ActionMachine {
     Default::default()
 }
 
-pub fn new_in_progress(cv: CellStateVariant, wait: InProgressWait) -> CellState {
+pub(crate) fn new_in_progress(cv: CellStateVariant, wait: InProgressWait) -> CellState {
     CellState {
         variant: cv,
         data: CellStateData::InProgress(InProgress::Pure(wait)),
     }
 }
 
-pub fn new_in_progress_with_variant(
+pub(crate) fn new_in_progress_with_variant(
     cv: CellStateVariant,
     wait: InProgressWait,
     cv2: CellStateVariant,
@@ -66,7 +59,7 @@ pub fn new_in_progress_with_variant(
     new_in_progress_with_other(cv, wait, Other::CellStateVariant(cv2))
 }
 
-pub fn new_in_progress_with_variant_and_resource(
+pub(crate) fn new_in_progress_with_variant_and_resource(
     cv: CellStateVariant,
     wait: InProgressWait,
     cv2: CellStateVariant,
@@ -82,7 +75,7 @@ fn new_in_progress_with_other(cv: CellStateVariant, wait: InProgressWait, oth: O
     }
 }
 
-pub fn maybe_insert(
+pub(crate) fn maybe_insert(
     mut m: ActionMachine,
     pos: hexgrid::Pos,
     cv: celldata::CellStateVariant,
@@ -92,7 +85,7 @@ pub fn maybe_insert(
     }
     m
 }
-pub fn remove(
+pub(crate) fn remove(
     mut m: ActionMachine,
     pos: hexgrid::Pos,
     cv: celldata::CellStateVariant,
@@ -103,14 +96,7 @@ pub fn remove(
     m
 }
 
-pub fn in_progress_variants() -> [celldata::CellStateVariant; 2] {
-    [
-        celldata::CellStateVariant::WoodCutter,
-        celldata::CellStateVariant::Hot,
-    ]
-}
-
-pub fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
+pub(crate) fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
     match cv {
         celldata::CellStateVariant::WoodCutter => 3,
         celldata::CellStateVariant::Hot => 5,
@@ -120,16 +106,6 @@ pub fn in_progress_max(cv: celldata::CellStateVariant) -> InProgressWait {
             unimplemented!()
         }
     }
-}
-
-pub fn statespace() -> celldata::Statespace {
-    let mut ret = vec![];
-    for cv in in_progress_variants() {
-        for j in 1..in_progress_max(cv) + 1 {
-            ret.push(new_in_progress(cv, j));
-        }
-    }
-    ret
 }
 
 fn do_in_progress(
@@ -303,7 +279,7 @@ fn do_tick(p: hexgrid::Pos, c: celldata::CellState, mut g: GameState) -> GameSta
     g
 }
 
-pub fn run(mut g: GameState) -> GameState {
+pub(crate) fn run(mut g: GameState) -> GameState {
     let old_acton_machine = g.action_machine.clone();
     for v in old_acton_machine {
         g = v.into_iter().fold(g, |mut acc, pos| {

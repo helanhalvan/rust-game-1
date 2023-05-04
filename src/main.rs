@@ -1,13 +1,13 @@
-pub mod actionmachine;
-pub mod building;
-pub mod celldata;
-pub mod css;
-pub mod hexgrid;
-pub mod logistics_plane;
-pub mod make_imgs;
-pub mod make_world;
-pub mod resource;
-pub mod visualize_cell;
+pub(crate) mod actionmachine;
+pub(crate) mod building;
+pub(crate) mod celldata;
+pub(crate) mod css;
+pub(crate) mod hexgrid;
+pub(crate) mod logistics_plane;
+pub(crate) mod make_imgs;
+pub(crate) mod make_world;
+pub(crate) mod resource;
+pub(crate) mod visualize_cell;
 
 use iced::executor;
 use iced::widget::{button, container};
@@ -19,35 +19,31 @@ mod widget {
     use crate::css::Theme;
     //use iced::Theme;
 
-    pub type Renderer = iced::Renderer<Theme>;
-    pub type Element<'a, Message> = iced::Element<'a, Message, Renderer>;
-    //pub type Container<'a, Message> = iced::widget::Container<'a, Message, Renderer>;
-    //pub type Button<'a, Message> = iced::widget::Button<'a, Message, Renderer>;
+    pub(crate) type Renderer = iced::Renderer<Theme>;
+    pub(crate) type Element<'a, Message> = iced::Element<'a, Message, Renderer>;
+    //pub(crate) type Container<'a, Message> = iced::widget::Container<'a, Message, Renderer>;
+    //pub(crate) type Button<'a, Message> = iced::widget::Button<'a, Message, Renderer>;
 }
 
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 use std::{env, vec};
 
-pub fn main() {
+pub(crate) fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 1 {
         let _ = AppState::run(Settings {
             antialiasing: true,
             ..Settings::default()
         });
-    } else if args[1] == "images" {
-        make_imgs::make_imgs();
     } else if args[1] == "test" {
         make_world::test();
         dbg!(args);
     }
 }
 
-pub type WindowPos = iced_native::Point;
-
 #[derive(Clone)]
-pub struct GameState {
+pub(crate) struct GameState {
     matrix: hexgrid::Board,
     logistics_plane: logistics_plane::LogisticsPlane,
     resources: GameResources,
@@ -56,19 +52,19 @@ pub struct GameState {
     io_cache: IOCache,
 }
 
-pub struct AppState {
+pub(crate) struct AppState {
     game_state: GameState,
     queues: Queues,
 }
 
 #[derive(Debug)]
-pub struct Queues {
+pub(crate) struct Queues {
     send_img_job: Sender<celldata::CellState>,
     get_img_done: Receiver<ImgDoneEvent>,
 }
 
 #[derive(Debug, Clone)]
-pub struct IOCache {
+pub(crate) struct IOCache {
     top_left_pos: iced_native::Point,
     latest_cursor: iced_native::Point,
     is_mousedown: bool,
@@ -82,14 +78,14 @@ pub struct IOCache {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct GameResources {
+pub(crate) struct GameResources {
     tiles: i32,
     leak: i32,
     heat_efficency: f64,
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub(crate) enum Message {
     Build(celldata::CellStateVariant, hexgrid::Pos),
     EndTurn,
     Zoom(bool),
@@ -98,7 +94,7 @@ pub enum Message {
 }
 
 #[derive(Debug, Clone)]
-pub struct ImgDoneEvent {
+pub(crate) struct ImgDoneEvent {
     path: String,
     data: celldata::CellState,
 }

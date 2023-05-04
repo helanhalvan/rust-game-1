@@ -11,9 +11,9 @@ use crate::{
     resource,
 };
 
-pub const MAX_WOOD: i32 = 6;
-pub const SCALING_WOOD: i32 = 16;
-pub const MAX_WOOD_RANGE: i32 = MAX_WOOD * SCALING_WOOD;
+pub(crate) const MAX_WOOD: i32 = 6;
+pub(crate) const SCALING_WOOD: i32 = 16;
+pub(crate) const MAX_WOOD_RANGE: i32 = MAX_WOOD * SCALING_WOOD;
 
 impl CellGen for celldata::CellState {
     type GenContext = GenContext;
@@ -52,11 +52,11 @@ impl CellGen for celldata::CellState {
 }
 
 #[derive(Clone)]
-pub struct GenContext {
+pub(crate) struct GenContext {
     main_noise: Fbm<Worley>,
 }
 
-pub fn new() -> hexgrid::Hexgrid<celldata::CellState, GenContext> {
+pub(crate) fn new() -> hexgrid::Hexgrid<celldata::CellState, GenContext> {
     let seed = if let Ok(n) = SystemTime::now().duration_since(UNIX_EPOCH) {
         (n.as_nanos() & u32::MAX as u128) as u32
     } else {
@@ -72,7 +72,7 @@ pub fn new() -> hexgrid::Hexgrid<celldata::CellState, GenContext> {
     )
 }
 
-pub fn test() {
+pub(crate) fn test() {
     let fbm = Fbm::<Perlin>::default();
 
     PlaneMapBuilder::<_, 2>::new(fbm)

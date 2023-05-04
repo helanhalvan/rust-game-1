@@ -10,17 +10,17 @@ use crate::{
 // mirror of the main board (hexgrid::Board) in size
 // for use of the building subsytem
 // need to keep "available logistics" somewhere
-pub type LogisticsPlane = hexgrid::Hexgrid<LogisticsState, hexgrid::EmptyContext>;
+pub(crate) type LogisticsPlane = hexgrid::Hexgrid<LogisticsState, hexgrid::EmptyContext>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Available {
-    pub locations: HashSet<hexgrid::Pos>,
-    pub borrows: HashMap<Pos, resource::ResourcePacket>,
-    pub taken_lp: HashMap<Pos, resource::ResourceValue>,
+pub(crate) struct Available {
+    pub(crate) locations: HashSet<hexgrid::Pos>,
+    pub(crate) borrows: HashMap<Pos, resource::ResourcePacket>,
+    pub(crate) taken_lp: HashMap<Pos, resource::ResourceValue>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LogisticsState {
+pub(crate) enum LogisticsState {
     None,
     Source,
     Available(Available),
@@ -34,11 +34,11 @@ impl hexgrid::CellGen for LogisticsState {
     }
 }
 
-pub fn new_plane() -> LogisticsPlane {
+pub(crate) fn new_plane() -> LogisticsPlane {
     hexgrid::new(hexgrid::EmptyContext::None, LogisticsState::None)
 }
 
-pub fn has_worker(pos: hexgrid::Pos, g: &GameState) -> bool {
+pub(crate) fn has_worker(pos: hexgrid::Pos, g: &GameState) -> bool {
     connected_sources(pos, g)
         .into_iter()
         .any(|i| can_use(pos, i, hexgrid::unsafe_get(i, &g.matrix)))
@@ -54,7 +54,7 @@ fn can_use(user: Pos, target: Pos, c: CellState) -> bool {
     }
 }
 
-pub fn return_borrows(pos: hexgrid::Pos, mut g: GameState) -> GameState {
+pub(crate) fn return_borrows(pos: hexgrid::Pos, mut g: GameState) -> GameState {
     let a = get_available(pos, &mut g);
     g = a.borrows.iter().fold(g, |mut acc: GameState, (p, b)| {
         let c0 = hexgrid::get(*p, &mut acc.matrix);
@@ -74,7 +74,7 @@ pub fn return_borrows(pos: hexgrid::Pos, mut g: GameState) -> GameState {
     g
 }
 
-pub fn return_lp(pos: hexgrid::Pos, mut g: GameState) -> GameState {
+pub(crate) fn return_lp(pos: hexgrid::Pos, mut g: GameState) -> GameState {
     let a = get_available(pos, &mut g);
     g = a.taken_lp.iter().fold(g, |mut acc: GameState, (p, b)| {
         let c0 = hexgrid::get(*p, &mut acc.matrix);
@@ -93,7 +93,7 @@ pub fn return_lp(pos: hexgrid::Pos, mut g: GameState) -> GameState {
     g
 }
 
-pub fn try_take_resources(
+pub(crate) fn try_take_resources(
     src: Pos,
     p: resource::ResourcePacket,
     g: &mut GameState,
@@ -102,7 +102,7 @@ pub fn try_take_resources(
     try_resources(src, p, false, g)
 }
 
-pub fn try_borrow_resources(
+pub(crate) fn try_borrow_resources(
     src: Pos,
     p: resource::ResourcePacket,
     g: &mut GameState,
@@ -199,7 +199,7 @@ fn connected_sources(pos: hexgrid::Pos, g: &GameState) -> Vec<hexgrid::Pos> {
     }
 }
 
-pub fn update_logistics(pos: hexgrid::Pos, is_hub: bool, mut g: GameState) -> GameState {
+pub(crate) fn update_logistics(pos: hexgrid::Pos, is_hub: bool, mut g: GameState) -> GameState {
     let other_hubs = find_connected_hubs(pos, &mut g);
     let connected_hubs = if is_hub {
         let mut tv: HashSet<_> = other_hubs.collect();

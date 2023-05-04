@@ -1,5 +1,5 @@
+use std::fs;
 use std::fs::File;
-use std::{collections::HashMap, fs};
 
 use cairo::Format;
 
@@ -36,14 +36,6 @@ enum Icon {
     OtherTriangle,
 }
 
-pub fn all_imgs() -> Vec<(celldata::CellState, String)> {
-    let mut all_imgs_buff = Vec::new();
-    for c in celldata::non_interactive_statespace() {
-        all_imgs_buff.push((c, make_path(c)))
-    }
-    return all_imgs_buff;
-}
-
 fn get_color_pair(cv: CellStateVariant) -> (Myrgb, Myrgb) {
     let dir = "".to_string() + BASE + &cv.to_string();
     let path = dir.clone() + "/colors.json";
@@ -64,22 +56,8 @@ fn get_color_pair(cv: CellStateVariant) -> (Myrgb, Myrgb) {
     }
 }
 
-pub fn make_imgs() {
-    for (variant, vec) in statespace_groups() {
-        let (background_color, front_color) = get_color_pair(variant);
-        for i in vec {
-            let path = make_path(i);
-            if let Ok(_) = fs::read(&path) {
-                print!("x");
-                continue;
-            }
-            make_image_int(i, (background_color, front_color))
-        }
-    }
-}
-
 //TODO send image invoking this on failed render
-pub fn make_image(c: CellState) -> String {
+pub(crate) fn make_image(c: CellState) -> String {
     let path = make_path(c);
     if let Ok(_) = fs::read(&path) {
         print!("x");
@@ -263,24 +241,6 @@ fn color_pair(ColorSource { a, b, c }: ColorSource) -> (Myrgb, Myrgb) {
 fn hsl_to_rgb(hsl: Hsl) -> Myrgb {
     let rgb = palette::rgb::Rgb::from_color(hsl);
     palette::rgb::Rgb::from_components((rgb.red.into(), rgb.green.into(), rgb.blue.into()))
-}
-
-fn statespace_groups() -> HashMap<celldata::CellStateVariant, Vec<CellState>> {
-    celldata::non_interactive_statespace().into_iter().fold(
-        HashMap::new(),
-        |mut acc: HashMap<celldata::CellStateVariant, Vec<_>>, i| {
-            let key = i.variant;
-            if let Some(v) = acc.get_mut(&key) {
-                v.push(i);
-                acc
-            } else {
-                let mut v = vec![];
-                v.push(i);
-                acc.insert(key, v);
-                acc
-            }
-        },
-    )
 }
 
 fn make_path(cellstate: celldata::CellState) -> String {

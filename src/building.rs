@@ -1,7 +1,7 @@
 use std::{cmp::min, collections::HashMap};
 
 use crate::{
-    actionmachine::{self, Other},
+    actionmachine::{self},
     celldata::{self, CellState, CellStateData, CellStateVariant},
     hexgrid::{self},
     logistics_plane::{self, LogisticsState},

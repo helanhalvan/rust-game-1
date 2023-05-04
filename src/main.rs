@@ -115,7 +115,7 @@ impl Application for AppState {
 
     fn subscription(&self) -> iced::Subscription<Self::Message> {
         let a = iced_native::subscription::events().map(Message::NativeEvent);
-        let b = iced::time::every(iced::time::Duration::from_millis(1000)).map(Message::Tick);
+        let b = iced::time::every(iced::time::Duration::from_millis(100)).map(Message::Tick);
         subscription::Subscription::batch(vec![a, b])
     }
 
@@ -253,7 +253,7 @@ impl Application for AppState {
                 re_calc_cells_in_view(&mut self.game_state)
             }
             Message::NativeEvent(_) => {}
-            Message::Tick(a) => {
+            Message::Tick(_) => {
                 while let Ok(new) = self
                     .queues
                     .get_img_done
@@ -263,7 +263,6 @@ impl Application for AppState {
                         .img_buffer
                         .insert(new.data, iced_native::image::Handle::from_path(new.path));
                 }
-                dbg!(a);
             }
         }
         Command::none()

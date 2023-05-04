@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::{
     building,
     celldata::{self},
-    css::{self, Container},
-    hexgrid, make_imgs, widget, GameState, Message,
+    css::{self},
+    hexgrid, widget, GameState, Message,
 };
 use iced::{
     alignment::{Horizontal, Vertical},

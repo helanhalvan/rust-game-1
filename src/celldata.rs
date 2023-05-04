@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use enum_iterator::Sequence;
 
-use crate::{actionmachine, building, hexgrid, resource};
+use crate::{actionmachine, hexgrid, resource};
 
 // Data in a cell (position) on the board
 // The two-field struct makes a bunch of impossible stuff representable

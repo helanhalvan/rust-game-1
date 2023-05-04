@@ -23,7 +23,7 @@ type Myrgb = palette::rgb::Rgb<Srgb, f64>;
 const BASE: &str = "./img/";
 
 #[derive(Serialize, Deserialize, Debug)]
-struct color_source {
+struct ColorSource {
     a: f32,
     b: f32,
     c: f32,
@@ -48,11 +48,11 @@ fn get_color_pair(cv: CellStateVariant) -> (Myrgb, Myrgb) {
     let dir = "".to_string() + BASE + &cv.to_string();
     let path = dir.clone() + "/colors.json";
     if let Ok(f) = fs::read_to_string(&path) {
-        let p: color_source = serde_json::from_str(&f).unwrap();
+        let p: ColorSource = serde_json::from_str(&f).unwrap();
         color_pair(p)
     } else {
         let mut rng = rand::thread_rng();
-        let p = color_source {
+        let p = ColorSource {
             a: rng.gen(),
             b: rng.gen(),
             c: rng.gen(),
@@ -241,7 +241,7 @@ fn set_color(context: Context, color: Myrgb) -> Context {
     context
 }
 
-fn color_pair(color_source { a, b, c }: color_source) -> (Myrgb, Myrgb) {
+fn color_pair(ColorSource { a, b, c }: ColorSource) -> (Myrgb, Myrgb) {
     let y: f32 = a;
     let hue: f32 = y * 360.0;
     let saturation: f32 = f32::max(b, 0.6);

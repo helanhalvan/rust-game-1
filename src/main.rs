@@ -293,8 +293,6 @@ impl Application for AppState {
         } = self.game_state.io_cache.top_left_hex;
         let matrix_build = start.elapsed().as_millis();
         let x = view_matrix
-            .iter()
-            .enumerate()
             .map(|(x_index, i)| {
                 let padding: Element<'static, Message> =
                     crate::Element::from(if (base_x + x_index as i32) % 2 == 0 {
@@ -302,26 +300,28 @@ impl Application for AppState {
                             .width(self.game_state.io_cache.cell_y_size)
                             .height(self.game_state.io_cache.cell_x_size / 2.0)
                     } else {
-                        container("").width(10).height(10)
+                        container("").width(0).height(0)
                     });
                 let mut data: Vec<Element<'static, Message>> = i
-                    .iter()
-                    .enumerate()
-                    .map(|(y_index, i)| {
-                        let yet_another_x: i32 = x_index.try_into().unwrap();
-                        let yet_another_y: i32 = y_index.try_into().unwrap();
-                        let matrix_x: i32 = base_x + yet_another_x;
-                        let matrix_y: i32 = base_y + yet_another_y;
-                        visualize_cell::to_gui(
+                    .map(
+                        |(
                             hexgrid::XYCont {
-                                x: matrix_x,
-                                y: matrix_y,
+                                x: x_index,
+                                y: y_index,
                             },
-                            i.clone(),
-                            &self.game_state,
-                            &self.queues.send_img_job,
-                        )
-                    })
+                            i,
+                        )| {
+                            visualize_cell::to_gui(
+                                hexgrid::XYCont {
+                                    x: x_index,
+                                    y: y_index,
+                                },
+                                i.clone(),
+                                &self.game_state,
+                                &self.queues.send_img_job,
+                            )
+                        },
+                    )
                     .collect();
                 data.insert(0, padding);
                 crate::Element::from(iced::widget::Column::with_children(data))
@@ -357,10 +357,9 @@ impl Application for AppState {
             .padding(20)
             .into();
         let total = start.elapsed().as_millis();
-        /*
         println!(
             "size:{} transform:{} matrix_build:{} other:{} total:{}",
-            view_matrix.len(),
+            self.game_state.io_cache.view_cells_x,
             matrix_build,
             transform - matrix_build,
             total - transform,

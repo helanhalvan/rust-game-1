@@ -7,7 +7,8 @@ use std::{
 use itertools::Itertools;
 
 use crate::{
-    celldata, make_world,
+    celldata,
+    make_world::{self, GenContext},
     matrix::{self, Matrix},
 };
 use std::hash::Hash;
@@ -147,15 +148,80 @@ fn is_chunk_corner(XYCont { x: x0, y: y0 }: XYCont<i32>) -> bool {
     ((x == 0) || (x == INDEX_MASK)) && (y == 0 || (y == INDEX_MASK))
 }
 
+pub(crate) struct PortIterator<'a, T: CellGen<GenContext = C>, C: Clone> {
+    x: i32,
+    x_max: i32,
+    y_min: i32,
+    y_max: i32,
+    source: &'a Hexgrid<T, C>,
+}
+
+pub(crate) struct RowIterator<'a, T: CellGen<GenContext = C>, C: Clone> {
+    x: i32,
+    y: i32,
+    y_max: i32,
+    source: &'a Hexgrid<T, C>,
+}
+
+impl<'a, T: CellGen<GenContext = C>, C: Clone> Iterator for PortIterator<'a, T, C> {
+    type Item = (i32, RowIterator<'a, T, C>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.x < self.x_max {
+            let ret = Some((
+                self.x,
+                RowIterator {
+                    x: self.x,
+                    y_max: self.y_max,
+                    y: self.y_min,
+                    source: self.source,
+                },
+            ));
+            self.x = self.x + 1;
+            ret
+        } else {
+            None
+        }
+    }
+}
+
+impl<T: CellGen<GenContext = C> + Clone + std::cmp::PartialEq + std::fmt::Debug, C: Clone> Iterator
+    for RowIterator<'_, T, C>
+{
+    type Item = (XYCont<i32>, T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.y < self.y_max {
+            let p = XYCont {
+                x: self.x,
+                y: self.y,
+            };
+            let ret = Some((p, unsafe_get(p, self.source)));
+            self.y = self.y + 1;
+            ret
+        } else {
+            None
+        }
+    }
+}
+
 pub(crate) fn view_port<
-    T: Clone + CellGen<GenContext = C> + std::cmp::PartialEq + std::fmt::Debug,
+    'a,
+    T: Clone + CellGen<GenContext = C> + std::cmp::PartialEq + std::fmt::Debug + Sized,
     C: Clone,
 >(
     source: &Hexgrid<T, C>,
     XYCont { x, y }: XYCont<i32>,
     height_extra: i32,
     width_extra: i32,
-) -> Vec<Vec<T>> {
+) -> PortIterator<T, C> {
+    let p = PortIterator {
+        x,
+        y_min: y,
+        x_max: x + width_extra,
+        y_max: y + width_extra,
+        source,
+    };
     let mut ret = vec![];
     for dx in 0..(height_extra + 1) {
         let mut y_buff = vec![];
@@ -171,7 +237,7 @@ pub(crate) fn view_port<
         }
         ret.push(y_buff)
     }
-    ret
+    p
 }
 
 pub(crate) fn pos_iter_to_cells<

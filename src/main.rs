@@ -14,6 +14,7 @@ use iced::executor;
 use iced::widget::{button, container};
 use iced::{Application, Command, Length, Settings};
 use iced_native::{row, subscription};
+use palette::white_point::B;
 use widget::Element;
 
 mod widget {
@@ -26,19 +27,19 @@ mod widget {
     //pub(crate) type Button<'a, Message> = iced::widget::Button<'a, Message, Renderer>;
 }
 
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
-use std::{env, vec};
+use std::{dbg, env, vec};
 
 pub(crate) fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 1 {
         let _ = AppState::run(Settings {
-            antialiasing: true,
             ..Settings::default()
         });
     } else if args[1] == "test" {
-        make_world::test();
         dbg!(args);
     }
 }
@@ -61,7 +62,7 @@ pub(crate) struct AppState {
 #[derive(Debug)]
 pub(crate) struct Queues {
     send_img_job: Sender<celldata::CellState>,
-    get_img_done: Receiver<ImgDoneEvent>,
+    get_img_done: RefCell<Option<Receiver<ImgDoneEvent>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -91,20 +92,27 @@ pub(crate) enum Message {
     EndTurn,
     Zoom(bool),
     NativeEvent(iced_native::Event),
-    Tick(iced::time::Instant),
+    ImgDone(ImgDoneEvent),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub(crate) struct ImgDoneEvent {
     path: String,
     data: celldata::CellState,
 }
 
-fn read_reply_loop(rx: Receiver<celldata::CellState>, tx: Sender<ImgDoneEvent>) {
+fn read_reply_loop(
+    mut done: HashSet<ImgDoneEvent>,
+    rx: Receiver<celldata::CellState>,
+    tx: Sender<ImgDoneEvent>,
+) {
     loop {
         let data = rx.recv().unwrap();
         let path = make_imgs::make_image(data);
-        tx.send(ImgDoneEvent { path, data }).unwrap();
+        let msg = ImgDoneEvent { path, data };
+        if done.insert(msg.clone()) {
+            tx.send(msg).unwrap();
+        }
     }
 }
 
@@ -114,16 +122,25 @@ impl Application for AppState {
     type Theme = css::Theme;
     type Flags = ();
 
+    //if self was passed as mutable, this would be so much cleaner, no need for using a ref_cell sneaking in mutability
     fn subscription(&self) -> iced::Subscription<Self::Message> {
         let a = iced_native::subscription::events().map(Message::NativeEvent);
-        let b = iced::time::every(iced::time::Duration::from_millis(100)).map(Message::Tick);
+        let b = iced::subscription::unfold(
+            "img_done",
+            self.queues.get_img_done.take(),
+            move |mut receiver0| async move {
+                let receiver = receiver0.as_mut().unwrap();
+                let first = receiver.recv().unwrap();
+                (Message::ImgDone(first), receiver0)
+            },
+        );
         subscription::Subscription::batch(vec![a, b])
     }
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
         let (s1, r1) = mpsc::channel();
         let (s2, r2) = mpsc::channel();
-        std::thread::spawn(move || read_reply_loop(r1, s2));
+        std::thread::spawn(move || read_reply_loop(HashSet::new(), r1, s2));
         let start_x: i32 = 0;
         let start_y: i32 = 0;
         let start_view_cells_x = 7;
@@ -175,7 +192,7 @@ impl Application for AppState {
             game_state: g,
             queues: Queues {
                 send_img_job: s1,
-                get_img_done: r2,
+                get_img_done: RefCell::new(Some(r2)),
             },
         };
         (a, Command::none())
@@ -254,22 +271,17 @@ impl Application for AppState {
                 re_calc_cells_in_view(&mut self.game_state)
             }
             Message::NativeEvent(_) => {}
-            Message::Tick(_) => {
-                while let Ok(new) = self
-                    .queues
-                    .get_img_done
-                    .recv_timeout(Duration::from_millis(0))
-                {
-                    self.game_state
-                        .img_buffer
-                        .insert(new.data, iced_native::image::Handle::from_path(new.path));
-                }
+            Message::ImgDone(i) => {
+                self.game_state
+                    .img_buffer
+                    .insert(i.data, iced_native::image::Handle::from_path(i.path));
             }
         }
         Command::none()
     }
 
     fn view(&self) -> Element<Message> {
+        let start = std::time::Instant::now();
         let view_matrix = hexgrid::view_port(
             &self.game_state.matrix,
             self.game_state.io_cache.top_left_hex,
@@ -280,6 +292,7 @@ impl Application for AppState {
             x: base_x,
             y: base_y,
         } = self.game_state.io_cache.top_left_hex;
+        let matrix_build = start.elapsed().as_millis();
         let x = view_matrix
             .iter()
             .enumerate()
@@ -315,6 +328,7 @@ impl Application for AppState {
                 crate::Element::from(iced::widget::Column::with_children(data))
             })
             .collect();
+        let transform = start.elapsed().as_millis();
         let matrix = crate::Element::from(iced::widget::Row::with_children(x));
         let resources = crate::Element::from(visualize_cell::to_text(
             format!("{:?}", self.game_state.resources).to_string(),
@@ -338,11 +352,23 @@ impl Application for AppState {
         let content =
             iced::widget::Column::with_children(vec![matrix, resources, buttom_buttons, ui_misc]);
 
-        container(content)
+        let ret = container(content)
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(20)
-            .into()
+            .into();
+        let total = start.elapsed().as_millis();
+        /*
+        println!(
+            "size:{} transform:{} matrix_build:{} other:{} total:{}",
+            view_matrix.len(),
+            matrix_build,
+            transform - matrix_build,
+            total - transform,
+            total
+        );
+        */
+        ret
     }
 }
 

@@ -59,7 +59,7 @@ fn get_color_pair(cv: CellStateVariant) -> (Myrgb, Myrgb) {
 pub(crate) fn make_image(c: CellState) -> String {
     let path = make_path(c);
     if let Ok(_) = fs::read(&path) {
-        print!("x");
+        //print!("x");
         return path;
     }
     let (background_color, front_color) = get_color_pair(c.variant);

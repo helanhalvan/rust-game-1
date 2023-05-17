@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    dbg,
     ops::{Add, Mul},
 };
 
@@ -8,14 +7,14 @@ use itertools::Itertools;
 
 use crate::{
     celldata,
-    make_world::{self, GenContext},
+    make_world::{self},
     matrix::{self, Matrix},
 };
 use std::hash::Hash;
 
-pub(crate) const CHUNK_SIZE: usize = 0x100;
-const INDEX_MASK: i32 = CHUNK_SIZE as i32 - 1;
-const CHUNK_MASK: i32 = !(0 ^ INDEX_MASK);
+pub(crate) const CHUNK_SIZE: usize = 0x10;
+const IN_CHUNK_MASK: i32 = CHUNK_SIZE as i32 - 1;
+const CHUNK_ID_MASK: i32 = !(0 ^ IN_CHUNK_MASK);
 
 #[derive(Debug, Clone)]
 pub(crate) struct Hexgrid<T: CellGen<GenContext = C>, C: Clone> {
@@ -143,9 +142,9 @@ pub(crate) fn touch_all_chunks<
 }
 
 fn is_chunk_corner(XYCont { x: x0, y: y0 }: XYCont<i32>) -> bool {
-    let x = x0 & INDEX_MASK;
-    let y = y0 & INDEX_MASK;
-    ((x == 0) || (x == INDEX_MASK)) && (y == 0 || (y == INDEX_MASK))
+    let x = x0 & IN_CHUNK_MASK;
+    let y = y0 & IN_CHUNK_MASK;
+    ((x == 0) || (x == IN_CHUNK_MASK)) && (y == 0 || (y == IN_CHUNK_MASK))
 }
 
 pub(crate) struct PortIterator<'a, T: CellGen<GenContext = C>, C: Clone> {
@@ -218,25 +217,10 @@ pub(crate) fn view_port<
     let p = PortIterator {
         x,
         y_min: y,
-        x_max: x + width_extra,
+        x_max: x + height_extra,
         y_max: y + width_extra,
         source,
     };
-    let mut ret = vec![];
-    for dx in 0..(height_extra + 1) {
-        let mut y_buff = vec![];
-        for dy in 0..(width_extra + 1) {
-            let new = unsafe_get(
-                XYCont {
-                    x: x + dx,
-                    y: y + dy,
-                },
-                source,
-            );
-            y_buff.push(new);
-        }
-        ret.push(y_buff)
-    }
     p
 }
 
@@ -380,12 +364,12 @@ pub(crate) fn unsafe_get<
 
 pub(crate) fn to_chunk_keys(Pos { x, y }: Pos) -> (XYCont<i32>, XYCont<usize>) {
     let chunk_key = XYCont {
-        x: x & CHUNK_MASK,
-        y: y & CHUNK_MASK,
+        x: x & CHUNK_ID_MASK,
+        y: y & CHUNK_ID_MASK,
     };
     let in_chunk_key = XYCont {
-        x: (x & INDEX_MASK) as usize,
-        y: (y & INDEX_MASK) as usize,
+        x: (x & IN_CHUNK_MASK) as usize,
+        y: (y & IN_CHUNK_MASK) as usize,
     };
     (chunk_key, in_chunk_key)
 }

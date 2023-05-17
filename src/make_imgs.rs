@@ -56,24 +56,33 @@ fn get_color_pair(cv: CellStateVariant) -> (Myrgb, Myrgb) {
     }
 }
 
-pub(crate) fn make_image(c: CellState) -> String {
-    let path = make_path(c);
+pub(crate) fn make_image((size, c): visualize_cell::ImgId) -> String {
+    let path = make_path(c, size);
     if let Ok(_) = fs::read(&path) {
         //print!("x");
         return path;
     }
     let (background_color, front_color) = get_color_pair(c.variant);
-    make_image_int(c, (background_color, front_color));
+    make_image_int(
+        c,
+        (background_color, front_color),
+        path.clone(),
+        size as f32,
+    );
     path
 }
 
-fn make_image_int(c: CellState, (background_color, front_color): (Myrgb, Myrgb)) {
+fn make_image_int(
+    c: CellState,
+    (background_color, front_color): (Myrgb, Myrgb),
+    path: String,
+    size: f32,
+) {
     let name = c.variant.to_string();
-    let width = (visualize_cell::START_CELL_Y_SIZE * 4.0) as i32;
-    let height = (visualize_cell::START_CELL_X_SIZE * 4.0) as i32;
+    let width = (visualize_cell::START_CELL_Y_SIZE * size * 0.5) as i32;
+    let height = (visualize_cell::START_CELL_X_SIZE * size * 0.5) as i32;
     let fontsize = height as f64 / 8.0;
     let spacing = height as f64 / 40.0;
-    let path = make_path(c);
     let surface = cairo::ImageSurface::create(Format::Rgb24.into(), width, height).unwrap();
     let mut context = cairo::Context::new(&surface).unwrap();
     context = set_color(context, background_color);
@@ -251,14 +260,15 @@ fn hsl_to_rgb(hsl: Hsl) -> Myrgb {
     palette::rgb::Rgb::from_components((rgb.red.into(), rgb.green.into(), rgb.blue.into()))
 }
 
-fn make_path(cellstate: celldata::CellState) -> String {
+fn make_path(cellstate: celldata::CellState, size: i32) -> String {
     let cv = cellstate.variant;
     let base = "".to_string() + BASE + &cv.to_string();
+    let extension = "_".to_string() + &size.to_string() + &".png";
     let (dir, path) = match cellstate.data {
         CellStateData::InProgress(actionmachine::InProgress::Pure(countdown))
         | CellStateData::InProgress(actionmachine::InProgress::WithOther(countdown, _)) => {
             let dir = base + "/inprogress/";
-            (dir.clone(), dir + &countdown.to_string() + &".png")
+            (dir.clone(), dir + &countdown.to_string() + &extension)
         }
         celldata::CellStateData::Resource(Resource::Pure(r))
         | celldata::CellStateData::Resource(Resource::WithVariant(r, _)) => {
@@ -268,25 +278,25 @@ fn make_path(cellstate: celldata::CellState) -> String {
                 .map(|(t, v)| format!("{:?}", t) + ":" + &v.to_string())
                 .join("_");
             let dir = base + "/resource/";
-            (dir.clone(), dir + "a_" + &name + &".png")
+            (dir.clone(), dir + "a_" + &name + &extension)
         }
         celldata::CellStateData::Unit { .. } => {
             let dir = base + "/unit/";
-            (dir.clone(), dir + &"unit.png")
+            (dir.clone(), dir + &extension)
         }
         celldata::CellStateData::Slot {
             slot: celldata::Slot::Empty,
             ..
         } => {
             let dir = base + "/empty/";
-            (dir.clone(), dir + &"empty.png")
+            (dir.clone(), dir + &"empty" + &extension)
         }
         celldata::CellStateData::Slot {
             slot: celldata::Slot::Done,
             ..
         } => {
             let dir = base + "/done/";
-            (dir.clone(), dir + "done" + &".png")
+            (dir.clone(), dir + "done" + &extension)
         }
     };
     let _ = fs::create_dir_all(dir.clone());

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, dbg};
 
 use crate::{
     celldata::{self},
@@ -12,14 +12,40 @@ use iced::{
 use iced_native::Length;
 use widget::Element;
 
-pub(crate) type ImgBuffer = HashMap<celldata::CellState, image::Handle>;
+pub(crate) type ImgId = (i32, celldata::CellState);
+pub(crate) type ImgBuffer = HashMap<i32, HashMap<celldata::CellState, image::Handle>>;
 
 pub(crate) fn new_img_buffer() -> ImgBuffer {
-    return HashMap::new();
+    let mut ret = HashMap::new();
+    for i in 0..100 {
+        ret.insert(i, HashMap::new());
+    }
+    return ret;
 }
 
-fn has_image(s: celldata::CellState, buff: &ImgBuffer) -> Option<&image::Handle> {
-    buff.get(&s)
+fn has_image(
+    id: celldata::CellState,
+    buff: &HashMap<celldata::CellState, image::Handle>,
+) -> Option<&image::Handle> {
+    buff.get(&id)
+}
+
+fn make_img_id(size: i32, s: celldata::CellState) -> ImgId {
+    let int = size.ilog2() as i32;
+    //dbg!((int, size));
+    (int, s)
+}
+
+pub(crate) fn insert(buffer: &mut ImgBuffer, (id, id2): ImgId, path: String) -> &mut ImgBuffer {
+    let handle = iced_native::image::Handle::from_path(path);
+    if let Some(map) = buffer.get_mut(&id) {
+        map.insert(id2, handle);
+    } else {
+        let mut map = HashMap::new();
+        map.insert(id2, handle);
+        buffer.insert(id, map);
+    };
+    buffer
 }
 
 pub(crate) const START_CELL_X_SIZE: f32 = 100.0;
@@ -27,18 +53,20 @@ pub(crate) const START_CELL_Y_SIZE: f32 = 125.0;
 pub(crate) const ZOOM_FACTOR: f32 = 1.5;
 
 pub(crate) fn to_gui<'a>(
+    cell_x_size: i32,
     pos: hexgrid::XYCont<i32>,
     s: celldata::CellState,
     g: &GameState,
-    send: &std::sync::mpsc::Sender<celldata::CellState>,
+    send: &std::sync::mpsc::Sender<ImgId>,
 ) -> Element<'a, Message> {
-    let imgs: &ImgBuffer = &g.img_buffer;
+    let imgs = &g.img_buffer[&(cell_x_size.ilog2() as i32)];
+    let img_id = make_img_id(cell_x_size, s);
     let content = match menu::has_actions(pos, s, g) {
-        Some(actions) => render_action_cell(actions, pos, imgs, s, send),
+        Some(actions) => render_action_cell(img_id, actions, pos, imgs, s, send),
         None => match has_image(s, imgs) {
             Some(img_handle) => to_image(img_handle),
             None => {
-                let _ = send.send(s);
+                let _ = send.send(img_id);
                 backup_formatter(s)
             }
         },
@@ -55,11 +83,12 @@ pub(crate) fn to_gui<'a>(
 }
 
 fn render_action_cell<'a>(
+    img_id: ImgId,
     actions: Vec<celldata::CellStateVariant>,
     pos: hexgrid::Pos,
-    imgs: &ImgBuffer,
+    imgs: &HashMap<celldata::CellState, image::Handle>,
     s: celldata::CellState,
-    send: &std::sync::mpsc::Sender<celldata::CellState>,
+    send: &std::sync::mpsc::Sender<ImgId>,
 ) -> Element<'a, Message> {
     let layout = if actions.len() > 2 {
         to_rectangle(actions, 4, 2)
@@ -84,7 +113,7 @@ fn render_action_cell<'a>(
     let top = match has_image(s, imgs) {
         Some(img) => to_image(img),
         None => {
-            let _ = send.send(s);
+            let _ = send.send(img_id);
             to_text(format!("{:?}", s.variant).to_string())
         }
     };

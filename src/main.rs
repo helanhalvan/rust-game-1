@@ -60,7 +60,7 @@ pub(crate) struct AppState {
 
 #[derive(Debug)]
 pub(crate) struct Queues {
-    send_img_job: Sender<celldata::CellState>,
+    send_img_job: Sender<visualize_cell::ImgId>,
     get_img_done: RefCell<Option<Receiver<ImgDoneEvent>>>,
 }
 
@@ -97,12 +97,12 @@ pub(crate) enum Message {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub(crate) struct ImgDoneEvent {
     path: String,
-    data: celldata::CellState,
+    data: visualize_cell::ImgId,
 }
 
 fn read_reply_loop(
     mut done: HashSet<ImgDoneEvent>,
-    rx: Receiver<celldata::CellState>,
+    rx: Receiver<visualize_cell::ImgId>,
     tx: Sender<ImgDoneEvent>,
 ) {
     loop {
@@ -271,9 +271,7 @@ impl Application for AppState {
             }
             Message::NativeEvent(_) => {}
             Message::ImgDone(i) => {
-                self.game_state
-                    .img_buffer
-                    .insert(i.data, iced_native::image::Handle::from_path(i.path));
+                visualize_cell::insert(&mut self.game_state.img_buffer, i.data, i.path);
             }
         }
         Command::none()
@@ -287,15 +285,11 @@ impl Application for AppState {
             self.game_state.io_cache.view_cells_x - 1,
             self.game_state.io_cache.view_cells_y - 1,
         );
-        let hexgrid::XYCont {
-            x: base_x,
-            y: base_y,
-        } = self.game_state.io_cache.top_left_hex;
         let matrix_build = start.elapsed().as_millis();
         let x = view_matrix
             .map(|(x_index, i)| {
                 let padding: Element<'static, Message> =
-                    crate::Element::from(if (base_x + x_index as i32) % 2 == 0 {
+                    crate::Element::from(if (x_index % 2) == 0 {
                         container("")
                             .width(self.game_state.io_cache.cell_y_size)
                             .height(self.game_state.io_cache.cell_x_size / 2.0)
@@ -312,6 +306,7 @@ impl Application for AppState {
                             i,
                         )| {
                             visualize_cell::to_gui(
+                                self.game_state.io_cache.cell_x_size as i32,
                                 hexgrid::XYCont {
                                     x: x_index,
                                     y: y_index,

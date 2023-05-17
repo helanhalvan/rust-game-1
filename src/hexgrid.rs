@@ -1,14 +1,18 @@
 use std::{
     collections::{HashMap, HashSet},
+    dbg,
     ops::{Add, Mul},
 };
 
 use itertools::Itertools;
 
-use crate::{celldata, make_world};
+use crate::{
+    celldata, make_world,
+    matrix::{self, Matrix},
+};
 use std::hash::Hash;
 
-pub(crate) const CHUNK_SIZE: usize = 0x10;
+pub(crate) const CHUNK_SIZE: usize = 0x100;
 const INDEX_MASK: i32 = CHUNK_SIZE as i32 - 1;
 const CHUNK_MASK: i32 = !(0 ^ INDEX_MASK);
 
@@ -30,8 +34,6 @@ pub(crate) trait CellGen {
 pub(crate) enum EmptyContext {
     None,
 }
-
-pub(crate) type Matrix<T> = Vec<Vec<T>>;
 
 //Could be array if generalized array initalization was easy
 type Chunk<T> = Matrix<T>;
@@ -114,10 +116,13 @@ pub(crate) fn chunk_from_example<T: Clone + CellGen<GenContext = C>, C: Clone>(
         }
         ret.push(row)
     }
-    ret
+    matrix::new(CHUNK_SIZE, CHUNK_SIZE, ret)
 }
 
-pub(crate) fn touch_all_chunks<T: Clone + CellGen<GenContext = C>, C: Clone>(
+pub(crate) fn touch_all_chunks<
+    T: Clone + CellGen<GenContext = C> + std::cmp::PartialEq + std::fmt::Debug,
+    C: Clone,
+>(
     source: &mut Hexgrid<T, C>,
     XYCont { x: x0, y: y0 }: XYCont<i32>,
     height_extra: i32,
@@ -142,12 +147,15 @@ fn is_chunk_corner(XYCont { x: x0, y: y0 }: XYCont<i32>) -> bool {
     ((x == 0) || (x == INDEX_MASK)) && (y == 0 || (y == INDEX_MASK))
 }
 
-pub(crate) fn view_port<T: Clone + CellGen<GenContext = C>, C: Clone>(
+pub(crate) fn view_port<
+    T: Clone + CellGen<GenContext = C> + std::cmp::PartialEq + std::fmt::Debug,
+    C: Clone,
+>(
     source: &Hexgrid<T, C>,
     XYCont { x, y }: XYCont<i32>,
     height_extra: i32,
     width_extra: i32,
-) -> Matrix<T> {
+) -> Vec<Vec<T>> {
     let mut ret = vec![];
     for dx in 0..(height_extra + 1) {
         let mut y_buff = vec![];
@@ -166,7 +174,11 @@ pub(crate) fn view_port<T: Clone + CellGen<GenContext = C>, C: Clone>(
     ret
 }
 
-pub(crate) fn pos_iter_to_cells<'a, T: Clone + CellGen<GenContext = C>, C: Clone>(
+pub(crate) fn pos_iter_to_cells<
+    'a,
+    T: Clone + CellGen<GenContext = C> + std::cmp::PartialEq + std::fmt::Debug,
+    C: Clone,
+>(
     pos: impl IntoIterator<Item = Pos> + 'a,
     m: &'a mut Hexgrid<T, C>,
 ) -> impl Iterator<Item = (Pos, T)> + 'a {
@@ -175,7 +187,12 @@ pub(crate) fn pos_iter_to_cells<'a, T: Clone + CellGen<GenContext = C>, C: Clone
 }
 
 pub(crate) fn get_connected<
-    T: Clone + std::cmp::Eq + std::hash::Hash + CellGen<GenContext = C>,
+    T: Clone
+        + std::cmp::Eq
+        + std::hash::Hash
+        + CellGen<GenContext = C>
+        + std::cmp::PartialEq
+        + std::fmt::Debug,
     C: Clone,
 >(
     p: Pos,
@@ -196,7 +213,11 @@ pub(crate) fn get_connected<
     return connected;
 }
 
-pub(crate) fn within<'a, T: Clone + CellGen<GenContext = C>, C: Clone>(
+pub(crate) fn within<
+    'a,
+    T: Clone + CellGen<GenContext = C> + std::cmp::PartialEq + std::fmt::Debug,
+    C: Clone,
+>(
     Pos { x: x0, y: y0 }: Pos,
     m: &'a mut Hexgrid<T, C>,
     range: i32,
@@ -229,14 +250,21 @@ fn v_mul_reduce(v1: &Vec<i32>, v2: &Vec<XYCont<i32>>) -> XYCont<i32> {
     ret
 }
 
-pub(crate) fn neighbors<'a, T: Clone + CellGen<GenContext = C>, C: Clone>(
+pub(crate) fn neighbors<
+    'a,
+    T: Clone + CellGen<GenContext = C> + std::cmp::PartialEq + std::fmt::Debug,
+    C: Clone,
+>(
     p: Pos,
     m: &'a mut Hexgrid<T, C>,
 ) -> impl Iterator<Item = (Pos, T)> + 'a {
     within(p, m, 1)
 }
 
-pub(crate) fn set<T: Clone + CellGen<GenContext = C>, C: Clone>(
+pub(crate) fn set<
+    T: Clone + CellGen<GenContext = C> + std::cmp::PartialEq + std::fmt::Debug,
+    C: Clone,
+>(
     p: Pos,
     new_cell: T,
     m: &mut Hexgrid<T, C>,
@@ -247,11 +275,14 @@ pub(crate) fn set<T: Clone + CellGen<GenContext = C>, C: Clone>(
     } else {
         T::new_chunk(chunk_key, &mut m.gen_context)
     };
-    chunk[in_chunk_key.x][in_chunk_key.y] = new_cell;
+    matrix::set(&mut chunk, new_cell, in_chunk_key);
     m.chunks.insert(chunk_key, chunk);
 }
 
-pub(crate) fn get<T: Clone + CellGen<GenContext = C>, C: Clone>(
+pub(crate) fn get<
+    T: Clone + CellGen<GenContext = C> + std::cmp::PartialEq + std::fmt::Debug,
+    C: Clone,
+>(
     p: Pos,
     m: &mut Hexgrid<T, C>,
 ) -> T {
@@ -263,16 +294,19 @@ pub(crate) fn get<T: Clone + CellGen<GenContext = C>, C: Clone>(
         m.chunks.insert(chunk_key, chunk.clone());
         chunk
     };
-    chunk[in_chunk_key.x][in_chunk_key.y].clone()
+    matrix::get(&chunk, in_chunk_key).unwrap().clone()
 }
 
-pub(crate) fn unsafe_get<T: Clone + CellGen<GenContext = C>, C: Clone>(
+pub(crate) fn unsafe_get<
+    T: Clone + CellGen<GenContext = C> + std::cmp::PartialEq + std::fmt::Debug,
+    C: Clone,
+>(
     p: Pos,
     m: &Hexgrid<T, C>,
 ) -> T {
     let (chunk_key, in_chunk_key) = to_chunk_keys(p);
     if let Some(chunk) = m.chunks.get(&chunk_key) {
-        chunk[in_chunk_key.x][in_chunk_key.y].clone()
+        matrix::get(&chunk, in_chunk_key).unwrap().clone()
     } else {
         m.out_of_bounds.clone()
     }

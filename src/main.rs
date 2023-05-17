@@ -6,6 +6,7 @@ pub(crate) mod hexgrid;
 pub(crate) mod logistics_plane;
 pub(crate) mod make_imgs;
 pub(crate) mod make_world;
+pub(crate) mod matrix;
 pub(crate) mod menu;
 pub(crate) mod resource;
 pub(crate) mod visualize_cell;
@@ -14,7 +15,6 @@ use iced::executor;
 use iced::widget::{button, container};
 use iced::{Application, Command, Length, Settings};
 use iced_native::{row, subscription};
-use palette::white_point::B;
 use widget::Element;
 
 mod widget {
@@ -30,7 +30,6 @@ mod widget {
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::time::Duration;
 use std::{dbg, env, vec};
 
 pub(crate) fn main() {
@@ -367,7 +366,7 @@ impl Application for AppState {
             total - transform,
             total
         );
-        */
+        // */
         ret
     }
 }

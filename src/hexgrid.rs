@@ -218,25 +218,10 @@ pub(crate) fn view_port<
     let p = PortIterator {
         x,
         y_min: y,
-        x_max: x + width_extra,
+        x_max: x + height_extra,
         y_max: y + width_extra,
         source,
     };
-    let mut ret = vec![];
-    for dx in 0..(height_extra + 1) {
-        let mut y_buff = vec![];
-        for dy in 0..(width_extra + 1) {
-            let new = unsafe_get(
-                XYCont {
-                    x: x + dx,
-                    y: y + dy,
-                },
-                source,
-            );
-            y_buff.push(new);
-        }
-        ret.push(y_buff)
-    }
     p
 }
 

@@ -284,18 +284,14 @@ impl Application for AppState {
         let view_matrix = hexgrid::view_port(
             &self.game_state.matrix,
             self.game_state.io_cache.top_left_hex,
-            self.game_state.io_cache.view_cells_x - 1,
-            self.game_state.io_cache.view_cells_y - 1,
+            self.game_state.io_cache.view_cells_x,
+            self.game_state.io_cache.view_cells_y,
         );
-        let hexgrid::XYCont {
-            x: base_x,
-            y: base_y,
-        } = self.game_state.io_cache.top_left_hex;
         let matrix_build = start.elapsed().as_millis();
         let x = view_matrix
             .map(|(x_index, i)| {
                 let padding: Element<'static, Message> =
-                    crate::Element::from(if (base_x + x_index as i32) % 2 == 0 {
+                    crate::Element::from(if (x_index as i32) % 2 == 0 {
                         container("")
                             .width(self.game_state.io_cache.cell_y_size)
                             .height(self.game_state.io_cache.cell_x_size / 2.0)
@@ -357,6 +353,7 @@ impl Application for AppState {
             .padding(20)
             .into();
         let total = start.elapsed().as_millis();
+        /*
         println!(
             "size:{} transform:{} matrix_build:{} other:{} total:{}",
             self.game_state.io_cache.view_cells_x,

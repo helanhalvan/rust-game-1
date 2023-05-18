@@ -70,13 +70,45 @@ pub(super) fn setup_alphabets(
     if let Ok(_x) = fs::read_dir(real_glyth_dir.clone()) {
         return;
     }
+    //"fonts/Noto_Sans_Cuneiform/NotoSansCuneiform-Regular.ttf"
+    // 0x12000
+    // 0x1238F
     make_alphabet(
-        0x12000,
-        0x12004,
-        //0x1238F,
+        0x11A00,
+        0x11A00,
         600,
         600,
-        "fonts/Noto_Sans_Cuneiform/NotoSansCuneiform-Regular.ttf",
+        "fonts/NotoSansZanabazarSquare-Regular.ttf",
+        &real_glyth_dir,
+        background_color,
+        text_color,
+    );
+    make_alphabet(
+        0x11A0B,
+        0x11A32,
+        600,
+        600,
+        "fonts/NotoSansZanabazarSquare-Regular.ttf",
+        &real_glyth_dir,
+        background_color,
+        text_color,
+    );
+    make_alphabet(
+        0x11A3F,
+        0x11A40,
+        600,
+        600,
+        "fonts/NotoSansZanabazarSquare-Regular.ttf",
+        &real_glyth_dir,
+        background_color,
+        text_color,
+    );
+    make_alphabet(
+        0x11A44,
+        0x11A46,
+        600,
+        600,
+        "fonts/NotoSansZanabazarSquare-Regular.ttf",
         &real_glyth_dir,
         background_color,
         text_color,
@@ -95,14 +127,14 @@ pub(super) fn get_synt_glyth_path(glyth_id: i32, font_img_dir: &str) -> Option<P
     }
 }
 
-pub(super) fn get_real_glyth_path(glyth_id: i32, font_img_dir: &str) -> PathBuf {
+pub(super) fn get_real_glyth_path(seed: String, glyth_id: i32, font_img_dir: &str) -> PathBuf {
     let real_glyth_dir = "".to_string() + font_img_dir + &"real/".to_string();
     let _ = fs::create_dir_all(real_glyth_dir.clone());
     let imgs: Vec<_> = std::fs::read_dir(real_glyth_dir)
         .unwrap()
         .map(|i| i.unwrap().path())
         .collect();
-    imgs[(glyth_id % imgs.len() as i32).abs() as usize].clone()
+    imgs[(((glyth_id + 1) * util::hash(seed)) % imgs.len() as i32).abs() as usize].clone()
 }
 
 pub(super) fn get_synth_glyth(glyth_id: i32, font_img_dir: &str) -> PathBuf {

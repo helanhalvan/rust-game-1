@@ -118,7 +118,10 @@ pub(crate) fn make_image(c: CellState) -> PathBuf {
             if let Some(path) = icons::get_synt_glyth_path(id, &glyth_dir) {
                 (name, path)
             } else {
-                (name, icons::get_real_glyth_path(id, &glyth_dir))
+                (
+                    name,
+                    icons::get_real_glyth_path(sd.name.clone(), id, &glyth_dir),
+                )
             }
         })
         .collect();
@@ -155,7 +158,6 @@ fn make_image_int(
         cairo::FontWeight::Normal,
     );
     context.set_font_size(fontsize as f64);
-    let top_y = spacing * 3.0;
     //context.text_extents(&name); // dont know what this does or why it would be needed
     context.move_to(spacing as f64, (spacing + fontsize) as f64);
     let _ = context.show_text(&name);
@@ -190,10 +192,16 @@ fn draw_x(
     columns: i32,
     glyth_map: &HashMap<String, PathBuf>,
 ) -> Context {
-    let row_length = 3;
     let _ = context.save();
     let size = radius * 2.5;
     context.translate(size / 2.0, size * 0.75);
+    if x == 1 {
+        context.translate(0.0, size * 0.20);
+        context = draw_icon(context, radius * 2.0, icon.clone(), glyth_map);
+        let _ = context.restore();
+        return context;
+    }
+    let row_length = 3;
     if x > (row_length * columns) {
         let _ = context.show_text(&x.to_string());
         let _ = context.fill();
@@ -221,7 +229,7 @@ fn draw_icon(
     let icon_surface = cairo::ImageSurface::create_from_png(&mut src).unwrap();
     let _ = context.save();
     context.translate(-radius, -radius);
-    context.scale((radius * 2.0) / 600.0, (radius * 2.0) / 600.0);
+    context.scale((radius * 3.1) / 600.0, (radius * 3.1) / 600.0);
     let _ = context.set_source_surface(&icon_surface, 0.0, 0.0);
     let _ = context.paint();
     let _ = context.restore();

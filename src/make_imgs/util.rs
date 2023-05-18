@@ -1,7 +1,7 @@
-use std::{ffi::c_void, fs, rc::Rc};
-
 use cairo::{freetype::freetype::FT_FaceRec_, FontFace, ImageSurface};
 use serde::Serialize;
+use std::hash::Hash;
+use std::{collections::hash_map::DefaultHasher, ffi::c_void, fs, hash::Hasher, rc::Rc};
 
 pub(super) fn path_to_font(path: &str) -> FontFace {
     let lib = freetype::Library::init().unwrap();
@@ -50,4 +50,11 @@ pub(super) fn get_with_file_cache<'a, T, S: serde::de::DeserializeOwned + Serial
         fs::write(path, s).unwrap();
         parse(new)
     }
+}
+
+pub(super) fn hash<T: Hash>(seed: T) -> i32 {
+    let mut s = DefaultHasher::new();
+    seed.hash(&mut s);
+    let u = s.finish();
+    u as i32
 }

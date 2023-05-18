@@ -361,7 +361,7 @@ impl Application for AppState {
             .padding(20)
             .into();
         let _total = start.elapsed().as_millis();
-
+        /*
         println!(
             "size:{} transform:{} matrix_build:{} other:{} total:{}",
             self.game_state.io_cache.view_cells_x,

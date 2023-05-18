@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 
 use enum_iterator::Sequence;
 

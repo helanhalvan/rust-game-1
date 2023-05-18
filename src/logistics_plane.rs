@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
-use crate::matrix;
 use crate::{
     celldata::{CellState, CellStateData, CellStateVariant},
     hexgrid::{self, Pos},
@@ -30,7 +29,7 @@ pub(crate) enum LogisticsState {
 impl hexgrid::CellGen for LogisticsState {
     type GenContext = hexgrid::EmptyContext;
 
-    fn new_chunk(_p: Pos, _c: &mut Self::GenContext) -> matrix::Matrix<Self> {
+    fn new_chunk(_p: Pos, _c: &mut Self::GenContext) -> hexgrid::Chunk<Self> {
         hexgrid::chunk_from_example(LogisticsState::None)
     }
 }

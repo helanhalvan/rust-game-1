@@ -6,7 +6,6 @@ pub(crate) mod hexgrid;
 pub(crate) mod logistics_plane;
 pub(crate) mod make_imgs;
 pub(crate) mod make_world;
-pub(crate) mod matrix;
 pub(crate) mod menu;
 pub(crate) mod resource;
 pub(crate) mod visualize_cell;
@@ -29,8 +28,9 @@ mod widget {
 
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::{dbg, env, vec};
+use std::{dbg, env, fs, vec};
 
 pub(crate) fn main() {
     let args: Vec<String> = env::args().collect();
@@ -96,7 +96,7 @@ pub(crate) enum Message {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub(crate) struct ImgDoneEvent {
-    path: String,
+    path: PathBuf,
     data: celldata::CellState,
 }
 
@@ -271,9 +271,17 @@ impl Application for AppState {
             }
             Message::NativeEvent(_) => {}
             Message::ImgDone(i) => {
-                self.game_state
-                    .img_buffer
-                    .insert(i.data, iced_native::image::Handle::from_path(i.path));
+                if i.path.exists() && i.path.is_file() {
+                    let data = fs::read(i.path).unwrap();
+                    // This appears slower than keeping just filepaths in the handles,
+                    // however with file_paths I got random images not rendering
+                    // if there was a way to re-use the in-memory images for multiple
+                    // renders that might speed things up
+                    let handle = iced_native::image::Handle::from_memory(data);
+                    self.game_state.img_buffer.insert(i.data, handle);
+                } else {
+                    unreachable!("{:?}", i);
+                }
             }
         }
         Command::none()
@@ -287,7 +295,7 @@ impl Application for AppState {
             self.game_state.io_cache.view_cells_x,
             self.game_state.io_cache.view_cells_y,
         );
-        let matrix_build = start.elapsed().as_millis();
+        let _matrix_build = start.elapsed().as_millis();
         let x = view_matrix
             .map(|(x_index, i)| {
                 let padding: Element<'static, Message> =
@@ -323,7 +331,7 @@ impl Application for AppState {
                 crate::Element::from(iced::widget::Column::with_children(data))
             })
             .collect();
-        let transform = start.elapsed().as_millis();
+        let _transform = start.elapsed().as_millis();
         let matrix = crate::Element::from(iced::widget::Row::with_children(x));
         let resources = crate::Element::from(visualize_cell::to_text(
             format!("{:?}", self.game_state.resources).to_string(),
@@ -352,15 +360,15 @@ impl Application for AppState {
             .height(Length::Fill)
             .padding(20)
             .into();
-        let total = start.elapsed().as_millis();
-        /*
+        let _total = start.elapsed().as_millis();
+
         println!(
             "size:{} transform:{} matrix_build:{} other:{} total:{}",
             self.game_state.io_cache.view_cells_x,
-            matrix_build,
-            transform - matrix_build,
-            total - transform,
-            total
+            _matrix_build,
+            _transform - _matrix_build,
+            _total - _transform,
+            _total
         );
         // */
         ret

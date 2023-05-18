@@ -8,7 +8,7 @@ use noise::{utils::*, Fbm, Perlin, Worley};
 use crate::{
     celldata,
     hexgrid::{self, CellGen, CHUNK_SIZE},
-    matrix, resource,
+    resource,
 };
 
 pub(crate) const MAX_WOOD: i32 = 6;
@@ -18,7 +18,7 @@ pub(crate) const MAX_WOOD_RANGE: i32 = MAX_WOOD * SCALING_WOOD;
 impl CellGen for celldata::CellState {
     type GenContext = GenContext;
 
-    fn new_chunk(p: hexgrid::Pos, c: &mut Self::GenContext) -> matrix::Matrix<Self> {
+    fn new_chunk(p: hexgrid::Pos, c: &mut Self::GenContext) -> hexgrid::Chunk<Self> {
         let (chunk, _) = hexgrid::to_chunk_keys(p);
         //let filename = format!("{}_{}.png", chunk.x, chunk.y);
         let wood_map = chunk_plane(c.wood_noise.clone(), chunk);
@@ -45,7 +45,7 @@ impl CellGen for celldata::CellState {
             }
             ret.push(row)
         }
-        matrix::new(CHUNK_SIZE, CHUNK_SIZE, ret)
+        hexgrid::matrix::new(CHUNK_SIZE, CHUNK_SIZE, ret)
     }
 }
 

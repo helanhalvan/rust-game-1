@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    dbg,
     ops::{Add, Mul},
 };
 
@@ -8,10 +7,11 @@ use itertools::Itertools;
 
 use crate::{
     celldata,
-    make_world::{self, GenContext},
-    matrix::{self, Matrix},
+    make_world::{self},
 };
 use std::hash::Hash;
+
+pub(crate) mod matrix;
 
 pub(crate) const CHUNK_SIZE: usize = 0x100;
 const INDEX_MASK: i32 = CHUNK_SIZE as i32 - 1;
@@ -37,7 +37,7 @@ pub(crate) enum EmptyContext {
 }
 
 //Could be array if generalized array initalization was easy
-type Chunk<T> = Matrix<T>;
+pub(crate) type Chunk<T> = matrix::Matrix<T>;
 
 pub(crate) type Board = Hexgrid<celldata::CellState, make_world::GenContext>;
 pub(crate) type Pos = XYCont<i32>;

@@ -95,8 +95,8 @@ fn render_action_cell<'a>(
 fn backup_formatter<'a>(s: celldata::CellState) -> Element<'a, Message> {
     //dbg!(s);
     match s.data {
-        celldata::CellStateData::Unit => to_text(format!("{:?}", s.variant).to_string()),
-        _ => to_text(format!("{:?}", s).to_string()),
+        celldata::CellStateData::Unit => to_text(format!("DEFAULT:{:?}", s.variant).to_string()),
+        _ => to_text(format!("DEFAULT:{:?}", s).to_string()),
     }
 }
 
@@ -126,7 +126,7 @@ pub(crate) fn to_text<'a>(s: String) -> Element<'a, Message> {
     return crate::Element::from(text(s).size(20));
 }
 
-fn to_image<'a>(img_handle: &image::Handle) -> Element<'a, Message> {
+pub(crate) fn to_image<'a>(img_handle: &image::Handle) -> Element<'a, Message> {
     let image = iced::widget::Image::new(img_handle.clone())
         .width(Length::Fill)
         .height(Length::Fill);

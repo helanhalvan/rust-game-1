@@ -10,3 +10,5 @@ The core of the system is `src/celldata.rs`, it contains the two central datastr
  * `CellStateVariant` the different types of cells on the board, this defines what behaviour a cell should have. It is the only mandatory component of CellState
 
 `src/hexgrid.rs` provides a hexagonal `i32 * i32` sized gird to operate on. It provides the main grid of `CellState`s that's rendered by the UI, but also supports the creation of other grids, which is handy if you need a datastructure which shares a cordinate system with the main board.
+
+![image](screenshots/basic.png)
